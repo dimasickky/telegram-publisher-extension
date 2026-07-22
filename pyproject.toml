@@ -1,0 +1,9 @@
+[project]
+name = "telegram-connector"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["imperal-sdk"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

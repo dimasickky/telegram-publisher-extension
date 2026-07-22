@@ -1,0 +1,791 @@
+{
+  "manifest_schema_version": 3,
+  "sdk_version": "5.9.12",
+  "app_id": "telegram-connector-extension",
+  "version": "0.1.0",
+  "name": "Telegram Connector",
+  "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
+  "icon": "icon.svg",
+  "actions_explicit": true,
+  "system": false,
+  "capabilities": [
+    "telegram-connector-extension:read",
+    "telegram-connector-extension:write"
+  ],
+  "tools": [
+    {
+      "name": "skeleton_refresh_channels_overview",
+      "description": "Linked Telegram channels — id, title, can_post per channel.",
+      "scopes": [],
+      "parameters": {}
+    },
+    {
+      "name": "skeleton_alert_channels_overview",
+      "description": "Alert on channels linked or unlinked.",
+      "scopes": [],
+      "parameters": {
+        "old": {
+          "type": "string",
+          "required": false
+        },
+        "new": {
+          "type": "string",
+          "required": false
+        }
+      }
+    },
+    {
+      "name": "connect_telegram",
+      "description": "Get a link to connect your Telegram account to this extension — open it in Telegram and tap Start. Needed once before you can link any channel.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "telegram.connect"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "label": {
+            "default": "",
+            "description": "Optional friendly label for this connection, e.g. if the user has already connected once and wants a second bot-link flow for a different set of channels. Omit for the default single link.",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "title": "ConnectTelegramParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "properties": {
+          "deep_link": {
+            "description": "Open this in Telegram to link your account — taps Start automatically",
+            "title": "Deep Link",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deep_link"
+        ],
+        "title": "ConnectTelegramResult",
+        "type": "object"
+      },
+      "event": "telegram-connector-extension.connect_telegram",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-connector"
+    },
+    {
+      "name": "get_telegram_connection_status",
+      "description": "Check whether the user has linked their Telegram account to this extension yet.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {},
+        "title": "_NoParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "properties": {
+          "linked": {
+            "title": "Linked",
+            "type": "boolean"
+          },
+          "telegram_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Telegram User Id"
+          }
+        },
+        "required": [
+          "linked"
+        ],
+        "title": "ConnectionStatusResult",
+        "type": "object"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-connector"
+    },
+    {
+      "name": "list_telegram_channels",
+      "description": "List the Telegram channels/groups you've linked — where the bot has been added as admin after you connected your Telegram account.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {},
+        "title": "_NoParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "TelegramChannel": {
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "chat_type": {
+                "default": "",
+                "title": "Chat Type",
+                "type": "string"
+              },
+              "can_post": {
+                "default": false,
+                "title": "Can Post",
+                "type": "boolean"
+              },
+              "linked_at": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Linked At"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "TelegramChannel",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/TelegramChannel"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "EntityList[TelegramChannel]",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-connector"
+    },
+    {
+      "name": "post_to_channel",
+      "description": "Publish a post to one of your linked Telegram channels. Optionally attach a photo by URL. Requires the bot to have 'Post messages' permission on that channel.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "telegram.post"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "channel_id": {
+            "description": "Channel id from a previous list_telegram_channels call — never invent it",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "text": {
+            "description": "Post body. Accepts a LIMITED HTML subset only — Telegram channel posts support b/i/u/s/a/code/pre/blockquote/spoiler, NOT headings/tables/lists as HTML elements. Plain text also works unformatted.",
+            "title": "Text",
+            "type": "string"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional public image URL to attach as a photo post (caption = text)",
+            "title": "Photo Url"
+          },
+          "disable_preview": {
+            "default": false,
+            "description": "Suppress link preview card for URLs in the text",
+            "title": "Disable Preview",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "channel_id",
+          "text"
+        ],
+        "title": "PostToChannelParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "channel_id": {
+            "default": "",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "message_id": {
+            "default": 0,
+            "title": "Message Id",
+            "type": "integer"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Link"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "PostResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "telegram-connector-extension.post_published",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-connector"
+    },
+    {
+      "name": "disconnect_telegram_channel",
+      "description": "Unlink a Telegram channel from Imperal. Does NOT remove the bot from the channel on Telegram's side — do that manually if you also want the bot gone. Just makes Imperal forget about it.",
+      "action_type": "destructive",
+      "chain_callable": true,
+      "effects": [
+        "telegram.disconnect"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "channel_id": {
+            "description": "Channel id from a previous list_telegram_channels call — never invent it",
+            "title": "Channel Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_id"
+        ],
+        "title": "ChannelIdParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "channel_id": {
+            "default": "",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "disconnected": {
+            "default": false,
+            "title": "Disconnected",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "DisconnectResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "telegram-connector-extension.channel_disconnected",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-connector"
+    },
+    {
+      "name": "get_channel_recent_posts",
+      "description": "Read recent posts from a linked PUBLIC channel via its public t.me/s/ preview page. Only works for channels with a public @username — private channels have no such page (Telegram's Bot API has no history-fetch method at all, this is the only backfill path).",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "channel_id": {
+            "description": "Channel id from a previous list_telegram_channels call — never invent it",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "description": "Max recent posts to return, 1-100",
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channel_id"
+        ],
+        "title": "GetRecentPostsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "TelegramPost": {
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "message_id": {
+                "default": 0,
+                "title": "Message Id",
+                "type": "integer"
+              },
+              "date": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Date"
+              },
+              "text": {
+                "default": "",
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "TelegramPost",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/TelegramPost"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "EntityList[TelegramPost]",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-connector"
+    }
+  ],
+  "signals": [],
+  "schedules": [],
+  "required_scopes": [],
+  "icon_size_bytes": 492,
+  "webhooks": [
+    {
+      "path": "/telegram_updates",
+      "method": "POST",
+      "secret_header": "X-Telegram-Bot-Api-Secret-Token"
+    }
+  ],
+  "lifecycle": {
+    "health_check": {
+      "interval_sec": 60
+    }
+  },
+  "secrets": [
+    {
+      "name": "telegram_bot_token",
+      "description": "Bot token from @BotFather (e.g. '123456:ABC-DEF...'). ONE shared bot for every Imperal user — not a per-user credential. Used to call api.telegram.org/bot<token>/... and to register the webhook.",
+      "required": true,
+      "write_mode": "user",
+      "max_bytes": 128,
+      "scope": "app"
+    },
+    {
+      "name": "telegram_webhook_secret",
+      "description": "Random string used as Telegram's `secret_token` for setWebhook, verified against the `X-Telegram-Bot-Api-Secret-Token` header on every inbound update (constant-time compare) before trusting the payload. Generate once with `secrets.token_urlsafe(32)` and set in Developer Portal -> Secrets.",
+      "required": true,
+      "write_mode": "user",
+      "max_bytes": 256,
+      "scope": "app"
+    }
+  ],
+  "panels": [
+    {
+      "panel_id": "secrets",
+      "slot": "right",
+      "title": "Secrets",
+      "tree": {},
+      "icon": "KeyRound",
+      "refresh": "manual",
+      "center_overlay": false
+    }
+  ]
+}

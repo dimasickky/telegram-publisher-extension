@@ -1,0 +1,27 @@
+# Local Python artifacts
+**/.venv/
+**/.venv-*/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local secrets and environment configuration — never publish
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+credentials.json
+secrets.json
+
+# Editor and operating-system files
+.DS_Store
+.vscode/
+.idea/
