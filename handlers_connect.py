@@ -64,10 +64,33 @@ class ConnectionStatusResult(BaseModel):
 
 
 async def _bot_username(ctx) -> str | None:
-    resp = await tg.tg_call(ctx, "getMe")
+    try:
+        resp = await tg.tg_call(ctx, "getMe")
+    except RuntimeError:
+        # telegram_bot_token secret not configured yet — treat like any other
+        # "can't build a link" case rather than raising through the panel render.
+        return None
     if not tg.tg_ok(resp):
         return None
     return tg.tg_result(resp).get("username")
+
+
+async def create_connect_deep_link(ctx) -> str:
+    """Mint a one-shot link code and return the matching t.me Start deep-link.
+
+    Shared by the chat function and the sidebar. Panel buttons must receive a
+    concrete ``ui.Open(url)`` action at render time: a panel ``ui.Call`` only
+    displays the returned ActionResult summary as a toast and does not execute
+    UI actions nested in that result (same reasoning as github-connector's
+    create_authorize_url).
+    """
+    username = await _bot_username(ctx)
+    if not username:
+        return ""
+
+    code = _secrets_mod.token_urlsafe(16)
+    await storage.save_link_code(ctx, code, ctx.user.imperal_id, tg.now_iso())
+    return f"https://t.me/{username}?start={code}"
 
 
 @chat.function(
@@ -83,18 +106,14 @@ async def _bot_username(ctx) -> str | None:
 )
 async def connect_telegram(ctx, params: ConnectTelegramParams) -> ActionResult:
     """Mint a one-shot deep-link code and return the t.me Start link."""
-    username = await _bot_username(ctx)
-    if not username:
+    deep_link = await create_connect_deep_link(ctx)
+    if not deep_link:
         return ActionResult.error(
             "Telegram bot is not configured yet (telegram_bot_token secret missing or invalid) — "
             "the developer needs to finish setting up the bot first.",
             code=INTERNAL,
         )
 
-    code = _secrets_mod.token_urlsafe(16)
-    await storage.save_link_code(ctx, code, ctx.user.imperal_id, tg.now_iso())
-
-    deep_link = f"https://t.me/{username}?start={code}"
     return ActionResult.success(
         data={"deep_link": deep_link},
         summary=f"Open this link in Telegram and tap Start to connect: {deep_link}",
