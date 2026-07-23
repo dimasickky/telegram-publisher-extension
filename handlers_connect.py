@@ -224,6 +224,9 @@ async def _handle_my_chat_member(ctx, update: dict) -> None:
 
     if new_status not in ("administrator", "creator"):
         await storage.mark_channel_disconnected_for_user(ctx, imperal_id, chat_id)
+        await _emit_for_user(ctx, imperal_id, "telegram-publisher-extension.channel_disconnected", {
+            "imperal_id": imperal_id, "chat_id": chat_id,
+        })
         return
 
     can_post = bool(new_member.get("can_post_messages", False))
@@ -234,6 +237,29 @@ async def _handle_my_chat_member(ctx, update: dict) -> None:
         "can_post": can_post,
         "linked_at": tg.now_iso(),
     })
+
+    # This handler runs entirely under the webhook's own pseudo-identity
+    # (ctx.user.imperal_id == "__webhook__" — my_chat_member updates arrive
+    # unauthenticated), so a plain ctx.extensions.emit would publish under
+    # "__webhook__", a session the real user's own open sidebar panel is
+    # never subscribed to — its refresh="on_event:..." would just never
+    # fire. Emit through an ExtensionsClient rescoped to the resolved real
+    # imperal_id instead (same rescoping trick storage._store_for already
+    # uses), so a channel newly added while the panel is open shows up
+    # without the user having to manually reopen it.
+    await _emit_for_user(ctx, imperal_id, "telegram-publisher-extension.channel_connected", {
+        "imperal_id": imperal_id, "chat_id": chat_id,
+        "chat_title": chat_obj.get("title", str(chat_id)), "can_post": can_post,
+    })
+
+
+async def _emit_for_user(ctx, imperal_id: str, event: str, payload: dict) -> None:
+    """Best-effort event emit, rescoped to the real user — never let a panel-refresh
+    signal failure break the actual webhook processing it's attached to."""
+    try:
+        await storage._extensions_for(ctx, imperal_id).emit(event, payload)
+    except Exception as e:
+        log.warning("emit failed (non-fatal): %s", e)
 
 
 @ext.webhook("telegram_updates", method="POST", secret_header="X-Telegram-Bot-Api-Secret-Token")

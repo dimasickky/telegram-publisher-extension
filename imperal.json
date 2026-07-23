@@ -793,7 +793,7 @@
       "title": "Telegram",
       "tree": {},
       "icon": "",
-      "refresh": "on_event:telegram-publisher-extension.connect_telegram,telegram-publisher-extension.channel_disconnected",
+      "refresh": "on_event:telegram-publisher-extension.connect_telegram,telegram-publisher-extension.channel_connected,telegram-publisher-extension.channel_disconnected",
       "center_overlay": false,
       "default_width": 280,
       "min_width": 200,

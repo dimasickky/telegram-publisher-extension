@@ -52,6 +52,38 @@ def _store_for(ctx, user_id: str):
     )
 
 
+def _extensions_for(ctx, user_id: str):
+    """Build an ExtensionsClient scoped to an arbitrary user_id, reusing
+    ctx.extensions' own loader/ctx_factory/call_stack wiring (only the
+    kctx_dict's user_id differs) — identical rationale/implementation to
+    github-connector's storage._extensions_for.
+
+    `ctx.extensions.emit(...)` publishes the event under `ctx.extensions.
+    _kctx_dict["user_id"]` — inside the telegram_updates webhook that's the
+    pseudo-identity "__webhook__", not the real Imperal user (my_chat_member
+    updates arrive completely unauthenticated). A panel declared
+    `refresh="on_event:...,"` only re-fetches for the session the event was
+    published under, so an event emitted as "__webhook__" would never reach
+    the real user's own open panel. Rebuilding the client with the resolved
+    real imperal_id (found via resolve_imperal_id_for_telegram_user) fixes
+    that at the source.
+
+    Falls back to ctx.extensions itself when `_kctx_dict` isn't present
+    (imperal_sdk.testing's MockExtensions, used in tests).
+    """
+    if not hasattr(ctx.extensions, "_kctx_dict"):
+        return ctx.extensions
+    from imperal_sdk.extensions.client import ExtensionsClient
+    scoped_kctx = dict(ctx.extensions._kctx_dict, user_id=user_id)
+    return ExtensionsClient(
+        loader=ctx.extensions._loader,
+        ctx_factory=ctx.extensions._ctx_factory,
+        kctx_dict=scoped_kctx,
+        current_app_id=ctx.extensions._current,
+        call_stack=list(ctx.extensions._call_stack),
+    )
+
+
 # ── Link-code flow (connect_telegram -> webhook consumes on /start) ───────── #
 
 async def save_link_code(ctx, code: str, imperal_id: str, created_at: str) -> None:

@@ -34,6 +34,7 @@ def _channel_subtitle(record: dict) -> str:
     max_width=400,
     refresh=(
         "on_event:telegram-publisher-extension.connect_telegram,"
+        "telegram-publisher-extension.channel_connected,"
         "telegram-publisher-extension.channel_disconnected"
     ),
 )
