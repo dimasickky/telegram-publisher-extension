@@ -1,10 +1,10 @@
-"""telegram-connector · Skeleton tools."""
+"""telegram-publisher · Skeleton tools."""
 import logging
 
 from app import ext
 import storage
 
-log = logging.getLogger("telegram-connector")
+log = logging.getLogger("telegram-publisher")
 
 
 @ext.skeleton(

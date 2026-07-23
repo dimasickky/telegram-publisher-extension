@@ -1,4 +1,4 @@
-"""telegram-connector · per-user persistence (own storage, no shared backend).
+"""telegram-publisher · per-user persistence (own storage, no shared backend).
 
 Collections (all auto-partitioned by ctx.user.imperal_id, except the two
 explicitly built under the shared "__webhook__" pseudo-user via `_store_for`

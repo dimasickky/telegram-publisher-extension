@@ -1,4 +1,4 @@
-"""telegram-connector · identity bind (deep-link) + channel auto-discovery.
+"""telegram-publisher · identity bind (deep-link) + channel auto-discovery.
 
 Telegram has no OAuth redirect — the closest equivalent is a bot deep-link:
 `https://t.me/<bot_username>?start=<code>`. Opening it in Telegram starts a
@@ -49,7 +49,7 @@ from models import ConnectTelegramParams, TelegramChannel, _NoParams
 import storage
 import telegram_client as tg
 
-log = logging.getLogger("telegram-connector")
+log = logging.getLogger("telegram-publisher")
 
 _LINK_CODE_TTL_SECONDS = 900  # 15 minutes, same order of magnitude as github-connector's oauth state
 
@@ -78,7 +78,7 @@ async def _bot_username(ctx) -> str | None:
         "Telegram and tap Start. Needed once before you can link any channel."
     ),
     effects=["telegram.connect"],
-    event="telegram-connector-extension.connect_telegram",
+    event="telegram-publisher-extension.connect_telegram",
     data_model=ConnectTelegramResult,
 )
 async def connect_telegram(ctx, params: ConnectTelegramParams) -> ActionResult:

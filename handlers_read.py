@@ -1,4 +1,4 @@
-"""telegram-connector · reading recent posts from a linked channel.
+"""telegram-publisher · reading recent posts from a linked channel.
 
 Channel listing + connect status live in handlers_connect.py (identity/
 connect concerns, alongside connect_telegram); disconnecting a channel lives
@@ -7,7 +7,7 @@ since both act on an already-linked channel record) — this file only covers
 reading a channel's recent public posts.
 
 Two distinct data sources for "recent posts", both real limits noted in
-extensions/telegram-connector.md §3/§9:
+extensions/telegram-publisher.md §3/§9:
 
 1. `t.me/s/<username>` — Telegram's own public web preview of a channel.
    Works WITHOUT any bot/token for any PUBLIC channel (one with a username),
@@ -15,7 +15,7 @@ extensions/telegram-connector.md §3/§9:
    this is an HTML page we parse; it is explicitly the "backfill" path, not
    the live one. Private channels (no @username) have no such page at all.
 2. Nothing else. Bot API itself has NO getHistory-equivalent method — this
-   is a hard protocol limit (see extensions/telegram-connector.md §3), not
+   is a hard protocol limit (see extensions/telegram-publisher.md §3), not
    something worth working around with retries or pagination tricks. Posts
    made AFTER the bot was added as admin arrive live via the `channel_post`
    webhook update; `_ingest_channel_post` (called from handlers_connect.py's
@@ -33,7 +33,7 @@ from models import ChannelIdParams, GetRecentPostsParams, TelegramPost
 from error_codes import TG_CHANNEL_NOT_FOUND
 import storage
 
-log = logging.getLogger("telegram-connector")
+log = logging.getLogger("telegram-publisher")
 
 _POST_BLOCK_RE = re.compile(
     r'<div class="tgme_widget_message_text[^"]*"[^>]*>(.*?)</div>', re.DOTALL

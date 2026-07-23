@@ -1,16 +1,16 @@
 {
   "manifest_schema_version": 3,
   "sdk_version": "5.9.12",
-  "app_id": "telegram-connector-extension",
+  "app_id": "telegram-publisher-extension",
   "version": "0.1.0",
-  "name": "Telegram Connector",
+  "name": "Telegram Publisher",
   "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
   "icon": "icon.svg",
   "actions_explicit": true,
   "system": false,
   "capabilities": [
-    "telegram-connector-extension:read",
-    "telegram-connector-extension:write"
+    "telegram-publisher-extension:read",
+    "telegram-publisher-extension:write"
   ],
   "tools": [
     {
@@ -69,11 +69,11 @@
         "title": "ConnectTelegramResult",
         "type": "object"
       },
-      "event": "telegram-connector-extension.connect_telegram",
+      "event": "telegram-publisher-extension.connect_telegram",
       "background": false,
       "long_running": false,
       "scopes": [],
-      "owner_chat_tool": "telegram-connector"
+      "owner_chat_tool": "telegram-publisher"
     },
     {
       "name": "get_telegram_connection_status",
@@ -116,7 +116,7 @@
       "background": false,
       "long_running": false,
       "scopes": [],
-      "owner_chat_tool": "telegram-connector"
+      "owner_chat_tool": "telegram-publisher"
     },
     {
       "name": "list_telegram_channels",
@@ -283,7 +283,7 @@
       "background": false,
       "long_running": false,
       "scopes": [],
-      "owner_chat_tool": "telegram-connector"
+      "owner_chat_tool": "telegram-publisher"
     },
     {
       "name": "post_to_channel",
@@ -434,11 +434,11 @@
         "type": "object",
         "x-sdl": "entity"
       },
-      "event": "telegram-connector-extension.post_published",
+      "event": "telegram-publisher-extension.post_published",
       "background": false,
       "long_running": false,
       "scopes": [],
-      "owner_chat_tool": "telegram-connector"
+      "owner_chat_tool": "telegram-publisher"
     },
     {
       "name": "disconnect_telegram_channel",
@@ -552,11 +552,11 @@
         "type": "object",
         "x-sdl": "entity"
       },
-      "event": "telegram-connector-extension.channel_disconnected",
+      "event": "telegram-publisher-extension.channel_disconnected",
       "background": false,
       "long_running": false,
       "scopes": [],
-      "owner_chat_tool": "telegram-connector"
+      "owner_chat_tool": "telegram-publisher"
     },
     {
       "name": "get_channel_recent_posts",
@@ -740,7 +740,7 @@
       "background": false,
       "long_running": false,
       "scopes": [],
-      "owner_chat_tool": "telegram-connector"
+      "owner_chat_tool": "telegram-publisher"
     }
   ],
   "signals": [],

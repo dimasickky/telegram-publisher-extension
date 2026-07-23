@@ -1,6 +1,6 @@
-"""telegram-connector · entrypoint (Extension + ChatExtension + app-scope secrets).
+"""telegram-publisher · entrypoint (Extension + ChatExtension + app-scope secrets).
 
-Architecture (see extensions/telegram-connector.md for the full research):
+Architecture (see extensions/telegram-publisher.md for the full research):
 ONE shared Telegram bot for every Imperal user — same shape as github-connector's
 shared GitHub App, NOT a per-user OAuth/BYO credential like wp-site-connector or
 vikunja-bridge. That means the bot token is an APP-scope secret (one value,
@@ -22,17 +22,17 @@ shared backend") than to tasks/notes/sql-db (which do have one).
 from imperal_sdk import Extension, ChatExtension
 
 ext = Extension(
-    "telegram-connector-extension",
+    "telegram-publisher-extension",
     version="0.1.0",
-    capabilities=["telegram-connector-extension:read", "telegram-connector-extension:write"],
-    display_name="Telegram Connector",
+    capabilities=["telegram-publisher-extension:read", "telegram-publisher-extension:write"],
+    display_name="Telegram Publisher",
     description="Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
     icon="icon.svg",
     actions_explicit=True,
 )
 
 chat = ChatExtension(
-    ext, tool_name="telegram-connector",
+    ext, tool_name="telegram-publisher",
     description="Connect Telegram channels you administer, publish posts, and read new channel activity",
 )
 

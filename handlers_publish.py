@@ -1,4 +1,4 @@
-"""telegram-connector · publishing to a linked channel.
+"""telegram-publisher · publishing to a linked channel.
 
 Straightforward Bot API sendMessage/sendPhoto — the only real design
 decision here is the pre-flight check: `can_post` on the stored tg_channels
@@ -10,7 +10,7 @@ belt-and-suspenders:
      can_post_messages" reads identically to "bot isn't a member at all",
      which would confuse a user who thinks they already added the bot.
   2. The channel-admin-grants-partial-rights case flagged during the
-     original research (extensions/telegram-connector.md §7 step 4) — admin
+     original research (extensions/telegram-publisher.md §7 step 4) — admin
      rights are granular, "is admin" != "can post" is a real, distinct
      state Telegram allows.
 """
@@ -24,7 +24,7 @@ from error_codes import TG_CHANNEL_NOT_FOUND, TG_BOT_CANNOT_POST, TG_SEND_FAILED
 import storage
 import telegram_client as tg
 
-log = logging.getLogger("telegram-connector")
+log = logging.getLogger("telegram-publisher")
 
 
 @chat.function(
@@ -35,7 +35,7 @@ log = logging.getLogger("telegram-connector")
         "by URL. Requires the bot to have 'Post messages' permission on that channel."
     ),
     effects=["telegram.post"],
-    event="telegram-connector-extension.post_published",
+    event="telegram-publisher-extension.post_published",
     data_model=PostResult,
 )
 async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
@@ -100,7 +100,7 @@ async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
         "forget about it."
     ),
     effects=["telegram.disconnect"],
-    event="telegram-connector-extension.channel_disconnected",
+    event="telegram-publisher-extension.channel_disconnected",
     data_model=DisconnectResult,
 )
 async def disconnect_telegram_channel(ctx, params: ChannelIdParams) -> ActionResult:

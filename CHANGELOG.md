@@ -1,13 +1,13 @@
 # Changelog
 
-All notable changes to Telegram Connector are documented here.
+All notable changes to Telegram Publisher are documented here.
 
 ## [0.1.0] - 2026-07-22
 
 ### Added
 
 - Initial extension skeleton — own-storage design (no separate backend service), one shared Imperal bot for all users.
-- `connect_telegram` — one-shot deep-link (`t.me/<bot>?start=<code>`) identity bind, mirroring the deep-link pattern used by the platform's own Telegram connector (researched, not reused directly — see `extensions/telegram-connector.md` §2).
+- `connect_telegram` — one-shot deep-link (`t.me/<bot>?start=<code>`) identity bind, mirroring the deep-link pattern used by the platform's own Telegram connector (researched, not reused directly — see `extensions/telegram-publisher.md` §2).
 - `get_telegram_connection_status` — read-only connection check.
 - `telegram_updates` webhook — single endpoint handling `/start <code>` linking, `my_chat_member` channel auto-discovery (records `can_post_messages` per channel), and a `channel_post` ingest stub for a future live archive.
 - `list_telegram_channels` — SDL entity list of linked channels.

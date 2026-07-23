@@ -1,4 +1,4 @@
-"""telegram-connector · thin wrapper over ctx.http for the Telegram Bot API.
+"""telegram-publisher · thin wrapper over ctx.http for the Telegram Bot API.
 
 One shared bot token (app-scope secret, see app.py) — every call goes to
 https://api.telegram.org/bot<token>/<method>. No per-user credential here,
@@ -82,7 +82,7 @@ def split_message(text: str, limit: int = _MAX_TEXT_LEN) -> list[str]:
     """Split text into Telegram-safe chunks, breaking on paragraph/line
     boundaries where possible instead of mid-word — mirrors the platform
     Telegram connector's _split_message intent (see extensions/
-    telegram-connector.md §8), reimplemented here (not shared code, different
+    telegram-publisher.md §8), reimplemented here (not shared code, different
     bot/webhook/storage)."""
     if len(text) <= limit:
         return [text]
@@ -108,7 +108,7 @@ async def get_chat_administrators(ctx, chat_id):
     admins — each entry carries {user: {id, ...}, status, can_post_messages,
     ...}. Used by the my_chat_member handler to verify BOTH that the linking
     telegram_user_id is really an admin AND that the bot itself has
-    can_post_messages (see extensions/telegram-connector.md §7 step 4)."""
+    can_post_messages (see extensions/telegram-publisher.md §7 step 4)."""
     resp = await tg_call(ctx, "getChatAdministrators", {"chat_id": chat_id})
     if not tg_ok(resp):
         return None

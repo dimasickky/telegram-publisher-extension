@@ -1,4 +1,4 @@
-"""App-declared structured error codes for telegram-connector.
+"""App-declared structured error codes for telegram-publisher.
 
 Pairs with the platform taxonomy (imperal_sdk.chat.error_codes) for problems
 specific to reaching Telegram's Bot API / this extension's own connect flow —

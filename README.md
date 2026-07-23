@@ -1,4 +1,4 @@
-# Telegram Connector
+# Telegram Publisher
 
 [![Imperal SDK](https://img.shields.io/badge/Imperal%20SDK-5.9.12-6c5ce7?logo=python&logoColor=white)](https://imperal.io)
 [![License: LGPL v2.1](https://img.shields.io/badge/License-LGPL--2.1-blue.svg)](LICENSE)
@@ -6,7 +6,7 @@
 
 > Connect the Telegram channels and groups you administer to Imperal Cloud — publish posts and read new activity, straight from chat.
 
-**Telegram Connector** links your Telegram channels/groups to [Imperal Cloud](https://imperal.io), the ICNLI AI Cloud OS, through one shared Imperal bot. No separate backend service, no MTProto user login, no phone number ever touches this extension — everything runs through Telegram's official Bot API.
+**Telegram Publisher** links your Telegram channels/groups to [Imperal Cloud](https://imperal.io), the ICNLI AI Cloud OS, through one shared Imperal bot. No separate backend service, no MTProto user login, no phone number ever touches this extension — everything runs through Telegram's official Bot API.
 
 ## What it can do
 
@@ -20,7 +20,7 @@
 
 ## What it deliberately does NOT do
 
-- **No MTProto / user-client login.** Telegram's own developer terms put accounts logged in via unofficial API clients "under observation" and warn of permanent bans for automation abuse — full channel history and multi-account browsing are session-based features tied to that risk, so this extension doesn't offer them. See [`extensions/telegram-connector.md`](../extensions/telegram-connector.md) for the full research behind this call.
+- **No MTProto / user-client login.** Telegram's own developer terms put accounts logged in via unofficial API clients "under observation" and warn of permanent bans for automation abuse — full channel history and multi-account browsing are session-based features tied to that risk, so this extension doesn't offer them. See [`extensions/telegram-publisher.md`](../extensions/telegram-publisher.md) for the full research behind this call.
 - **No full history backfill for private channels.** The Bot API itself has no "fetch old messages" method — this is a hard protocol limit, not a missing feature.
 - **Not a Webbee chat channel.** If you already talk to Webbee through Telegram, that's a separate, platform-level integration — unrelated to this extension.
 
@@ -28,7 +28,7 @@
 
 ### 1. Install the extension
 
-Install **Telegram Connector** from Imperal Cloud when it is available in your workspace.
+Install **Telegram Publisher** from Imperal Cloud when it is available in your workspace.
 
 ### 2. Connect your Telegram identity
 
