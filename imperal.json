@@ -2,7 +2,7 @@
   "manifest_schema_version": 3,
   "sdk_version": "5.9.12",
   "app_id": "telegram-publisher-extension",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "name": "Telegram Publisher",
   "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
   "icon": "icon.svg",
@@ -280,6 +280,136 @@
         "x-sdl": "entity-list"
       },
       "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-publisher"
+    },
+    {
+      "name": "link_channel",
+      "description": "Link a Telegram channel the bot was ALREADY added to as admin, by its @username or numeric chat id. Use this when a channel doesn't appear in list_telegram_channels — typically because the bot was added to it before you connected Telegram here. Channels you add the bot to from now on are detected automatically.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "telegram.link_channel"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "channel": {
+            "description": "The channel to link, as its public @username (e.g. '@mychannel') or its numeric chat id (e.g. '-1001234567890'). Use this for a channel the bot was ALREADY added to as admin — channels added after connecting are picked up automatically and don't need this.",
+            "title": "Channel",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel"
+        ],
+        "title": "LinkChannelParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "chat_type": {
+            "default": "",
+            "title": "Chat Type",
+            "type": "string"
+          },
+          "can_post": {
+            "default": false,
+            "title": "Can Post",
+            "type": "boolean"
+          },
+          "linked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Linked At"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "TelegramChannel",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "telegram-publisher-extension.channel_connected",
       "background": false,
       "long_running": false,
       "scopes": [],
@@ -912,8 +1042,14 @@
     }
   ],
   "lifecycle": {
+    "on_install": true,
     "health_check": {
       "interval_sec": 60
+    }
+  },
+  "lifecycle_hooks": {
+    "on_install": {
+      "signature": "(ctx) -> dict"
     }
   },
   "secrets": [

@@ -164,7 +164,7 @@ async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
         return ActionResult.error("Could not reach Telegram — try again shortly.", retryable=True, code=TG_BOT_UNREACHABLE)
 
     if not tg.tg_ok(resp):
-        return ActionResult.error(tg.tg_error_message(resp), code=TG_SEND_FAILED)
+        return ActionResult.error(tg.tg_error_from(resp), code=TG_SEND_FAILED)
 
     result = tg.tg_result(resp)
     message_id = result.get("message_id", 0)

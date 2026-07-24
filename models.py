@@ -21,6 +21,15 @@ class ChannelIdParams(BaseModel):
     channel_id: str = Field(description="Channel id from a previous list_telegram_channels call — never invent it")
 
 
+class LinkChannelParams(BaseModel):
+    channel: str = Field(description=(
+        "The channel to link, as its public @username (e.g. '@mychannel') or its "
+        "numeric chat id (e.g. '-1001234567890'). Use this for a channel the bot "
+        "was ALREADY added to as admin — channels added after connecting are "
+        "picked up automatically and don't need this."
+    ))
+
+
 class PostToChannelParams(BaseModel):
     channel_id: str = Field(description="Channel id from a previous list_telegram_channels call — never invent it")
     text: str = Field(description=(

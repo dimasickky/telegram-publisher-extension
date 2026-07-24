@@ -15,3 +15,5 @@ TG_BOT_UNREACHABLE = "TG_BOT_UNREACHABLE"           # network/transport failure 
 TG_SEND_FAILED = "TG_SEND_FAILED"                   # Bot API returned ok:false on sendMessage/sendPhoto
 TG_MESSAGE_TOO_LONG = "TG_MESSAGE_TOO_LONG"          # text exceeds Telegram's post length limits after split
 TG_DRAFT_GENERATION_FAILED = "TG_DRAFT_GENERATION_FAILED"  # ctx.ai.complete() failed or returned empty text
+TG_CHAT_NOT_REACHABLE = "TG_CHAT_NOT_REACHABLE"      # getChat failed: no such chat, or bot isn't a member of it
+TG_BOT_NOT_ADMIN = "TG_BOT_NOT_ADMIN"               # bot is in the chat but not an administrator

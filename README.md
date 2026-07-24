@@ -67,6 +67,8 @@ Ask Webbee to connect Telegram — you'll get a one-tap deep link to `@ImperalCo
 
 In Telegram, open your channel/group → **Administrators** → add the bot → grant **Post Messages**. It shows up automatically the next time you list your channels.
 
+> **Added the bot before connecting here?** Then Telegram already fired (and discarded) the promotion event — it never replays it, so that channel can't be auto-detected. Link it once by name instead: `link_channel @yourchannel` (a numeric chat id or a `t.me/...` link works too). Everything you add from now on is picked up automatically.
+
 ### 4. Publish
 
 Ask Webbee to write and post to any linked channel — e.g. "write a post about X for my channel, matching its usual tone". You'll see a draft preview (in chat and as a DM from the bot itself) before anything actually goes out; confirm to publish.

@@ -40,12 +40,19 @@ import time
 from pydantic import BaseModel, Field
 
 from imperal_sdk import ActionResult, ui
-from imperal_sdk.chat.error_codes import INTERNAL
+from imperal_sdk.chat.error_codes import INTERNAL, VALIDATION_MISSING_FIELD
 
 from imperal_sdk import sdl
 
 from app import chat, ext
-from models import ConnectTelegramParams, TelegramChannel, _NoParams
+from models import ConnectTelegramParams, LinkChannelParams, TelegramChannel, _NoParams
+from error_codes import (
+    TG_BOT_CANNOT_POST,
+    TG_BOT_NOT_ADMIN,
+    TG_BOT_UNREACHABLE,
+    TG_CHAT_NOT_REACHABLE,
+    TG_NOT_LINKED,
+)
 import storage
 import telegram_client as tg
 
@@ -175,6 +182,117 @@ async def list_telegram_channels(ctx, params: _NoParams) -> ActionResult:
     )
 
 
+@chat.function(
+    "link_channel",
+    action_type="write",
+    description=(
+        "Link a Telegram channel the bot was ALREADY added to as admin, by its @username or "
+        "numeric chat id. Use this when a channel doesn't appear in list_telegram_channels — "
+        "typically because the bot was added to it before you connected Telegram here. "
+        "Channels you add the bot to from now on are detected automatically."
+    ),
+    effects=["telegram.link_channel"],
+    event="telegram-publisher-extension.channel_connected",
+    data_model=TelegramChannel,
+)
+async def link_channel(ctx, params: LinkChannelParams) -> ActionResult:
+    """Verify + store a channel the bot is already an admin of.
+
+    Exists because Telegram's `my_chat_member` update is strictly a point-in-time
+    event: it fires the moment the bot is promoted and is never replayed. A channel
+    the bot joined before this extension was deployed (or before the webhook
+    requested my_chat_member at all) is therefore invisible to auto-discovery
+    forever, with no way to recover it from the update stream. Asking Telegram
+    directly — getChat + getChatAdministrators — is the only path back.
+
+    Verifies three things against Telegram itself rather than trusting the caller:
+    the chat exists and the bot can see it, the bot is actually an administrator,
+    and (for channels) it holds can_post_messages.
+    """
+    link = await storage.get_telegram_user_link(ctx)
+    if not link:
+        return ActionResult.error(
+            "Connect your Telegram account first (connect_telegram), then link the channel.",
+            code=TG_NOT_LINKED,
+        )
+
+    raw = (params.channel or "").strip()
+    if not raw:
+        return ActionResult.error(
+            "Give me the channel's @username or its numeric chat id.",
+            code=VALIDATION_MISSING_FIELD,
+        )
+    # Telegram accepts "@name" for public chats and a bare negative id for any
+    # chat; normalise a pasted t.me link down to the @username form too.
+    if raw.startswith("https://t.me/") or raw.startswith("t.me/"):
+        raw = "@" + raw.rstrip("/").split("/")[-1]
+    if not raw.startswith("@") and not raw.lstrip("-").isdigit():
+        raw = "@" + raw
+
+    try:
+        chat_obj = await tg.get_chat(ctx, raw)
+    except Exception as e:
+        log.error("link_channel: transport error on getChat: %s", e)
+        return ActionResult.error(
+            "Could not reach Telegram — try again shortly.", retryable=True, code=TG_BOT_UNREACHABLE,
+        )
+
+    if not chat_obj:
+        return ActionResult.error(
+            f"Telegram doesn't show a chat for \"{raw}\" that this bot can see. Make sure the bot "
+            "has been added to that channel as an administrator, and double-check the @username.",
+            code=TG_CHAT_NOT_REACHABLE,
+        )
+
+    chat_id = chat_obj.get("id")
+    chat_type = chat_obj.get("type", "")
+    chat_title = chat_obj.get("title", str(chat_id))
+
+    bot = await tg.get_me(ctx)
+    admins = await tg.get_chat_administrators(ctx, chat_id)
+    if bot is None or admins is None:
+        return ActionResult.error(
+            f"Couldn't read the admin list of \"{chat_title}\" — the bot is probably not an "
+            "administrator there yet. Add it as admin with 'Post messages' permission, then retry.",
+            code=TG_BOT_NOT_ADMIN,
+        )
+
+    bot_member = next((a for a in admins if (a.get("user") or {}).get("id") == bot.get("id")), None)
+    if bot_member is None:
+        return ActionResult.error(
+            f"The bot isn't an administrator of \"{chat_title}\" — add it as admin (with "
+            "'Post messages' permission for a channel), then link it again.",
+            code=TG_BOT_NOT_ADMIN,
+        )
+
+    can_post = tg.derive_can_post(chat_type, bot_member)
+    if not can_post:
+        return ActionResult.error(
+            f"The bot is an admin on \"{chat_title}\" but doesn't have 'Post messages' permission — "
+            "grant it in Telegram's channel admin settings, then link it again.",
+            code=TG_BOT_CANNOT_POST,
+        )
+
+    await storage.save_channel_record_for_user(ctx, ctx.user.imperal_id, {
+        "chat_id": chat_id,
+        "chat_title": chat_title,
+        "chat_type": chat_type,
+        "can_post": can_post,
+        "linked_at": tg.now_iso(),
+        "chat_username": chat_obj.get("username", ""),
+    })
+
+    return ActionResult.success(
+        TelegramChannel(
+            id=str(chat_id), title=chat_title, kind="telegram_channel",
+            subtitle=chat_type, chat_type=chat_type, can_post=can_post,
+            linked_at=tg.now_iso(),
+        ),
+        summary=f"Linked \"{chat_title}\" — you can publish to it now.",
+        refresh_panels=["sidebar"],
+    )
+
+
 async def _handle_start(ctx, message: dict) -> None:
     """Consume a /start <code> deep-link and record the identity bind both ways."""
     text = message.get("text", "")
@@ -229,13 +347,22 @@ async def _handle_my_chat_member(ctx, update: dict) -> None:
         })
         return
 
-    can_post = bool(new_member.get("can_post_messages", False))
+    # Derive via the shared helper rather than reading can_post_messages here:
+    # that right only exists on CHANNEL admin records, so a bare .get() would
+    # store can_post=False for an admin bot in a group/supergroup and make
+    # post_to_channel refuse a chat it can genuinely publish to.
+    can_post = tg.derive_can_post(chat_obj.get("type", ""), new_member)
     await storage.save_channel_record_for_user(ctx, imperal_id, {
         "chat_id": chat_id,
         "chat_title": chat_obj.get("title", str(chat_id)),
         "chat_type": chat_obj.get("type", ""),
         "can_post": can_post,
         "linked_at": tg.now_iso(),
+        # Persist the public @username so get_channel_recent_posts can reach
+        # the t.me/s/ preview page — handlers_read reads chat_username off this
+        # record, and auto-discovery previously never wrote it (only the manual
+        # link path did), leaving tone-sampling broken for auto-linked channels.
+        "chat_username": chat_obj.get("username", ""),
     })
 
     # This handler runs entirely under the webhook's own pseudo-identity

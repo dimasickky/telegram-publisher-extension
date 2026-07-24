@@ -66,6 +66,19 @@ def tg_error_message(status_code: int, description: str = "") -> str:
     return f"Telegram request failed (HTTP {status_code})."
 
 
+def tg_error_from(resp) -> str:
+    """Build the user-facing error message straight from an HTTPResponse.
+
+    tg_error_message() takes a plain (status_code, description) pair, which is
+    easy to call wrongly: passing the response object itself still "works"
+    syntactically and then explodes on `status_code in _ERROR_MESSAGES` with
+    TypeError: unhashable type. Both call sites had that bug. This wrapper is
+    the resp-shaped entry point so the unpacking happens in exactly one place.
+    """
+    status = getattr(resp, "status_code", 0) or 0
+    return tg_error_message(status, tg_description(resp))
+
+
 def tg_error_code(status_code: int) -> str:
     """Map an HTTP status to a platform structured error code
     (imperal_sdk.chat.error_codes) — pairs with tg_error_message()."""
@@ -122,3 +135,34 @@ async def get_me(ctx):
     if not tg_ok(resp):
         return None
     return tg_result(resp)
+
+
+async def get_chat(ctx, chat_id):
+    """getChat — resolve a chat by numeric id OR public @username into its
+    {id, title, type, username, ...}. The @username form is what makes manual
+    linking possible: a channel the bot was added to BEFORE this extension was
+    deployed never produced a my_chat_member update (Telegram does not replay
+    them), so the only way to discover it is to ask Telegram about it directly.
+    """
+    resp = await tg_call(ctx, "getChat", {"chat_id": chat_id})
+    if not tg_ok(resp):
+        return None
+    return tg_result(resp)
+
+
+def derive_can_post(chat_type: str, member: dict) -> bool:
+    """Decide whether the bot may publish, given its admin record in a chat.
+
+    `can_post_messages` is a CHANNEL-only admin right in Telegram's Bot API.
+    In a group/supergroup it is absent from ChatMemberAdministrator entirely,
+    because posting there isn't an admin privilege — any non-restricted member
+    can send messages. Reading the flag unconditionally therefore mislabels an
+    admin bot in a supergroup as "cannot post" and makes post_to_channel
+    refuse a chat it can actually publish to.
+    """
+    status = member.get("status", "")
+    if status not in ("administrator", "creator"):
+        return False
+    if (chat_type or "") == "channel":
+        return bool(member.get("can_post_messages", False))
+    return True
