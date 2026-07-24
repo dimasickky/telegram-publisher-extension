@@ -6,23 +6,25 @@ All notable changes to Telegram Publisher are documented here.
 
 ### Fixed
 
-- **Channels were never auto-discovered at all.** The extension never called
-  `setWebhook`, so registering the webhook URL was an undocumented manual step —
-  and, critically, Telegram EXCLUDES `my_chat_member` from `setWebhook`'s default
-  `allowed_updates` set (it must be listed explicitly). Without it Telegram
-  silently never delivers the "bot promoted to channel admin" event, so
-  `_handle_my_chat_member` never ran and no channel was ever linked — while
-  `/start` kept working fine, because plain `message` updates ARE in the default
-  set. That asymmetry made the connect flow look half-broken: identity bound,
-  channel list permanently empty. Now registered by an `@ext.on_install` hook
-  that requests `message`, `my_chat_member` and `channel_post` explicitly.
-  Idempotent (`setWebhook` overwrites), so redeploys are self-healing.
+- **A channel could be added correctly and stay invisible forever.**
+  `_handle_my_chat_member` resolved the promoting Telegram user to an
+  `imperal_id` and, when there wasn't one yet, silently discarded the update.
+  But promoting the bot BEFORE running `/start` is a perfectly natural order and
+  nothing prevents it — and that discarded event was unrecoverable: Telegram
+  never replays updates, and the Bot API exposes no method to enumerate the chats
+  a bot belongs to. The result was the worst kind of failure: the user had done
+  everything right (bot added, admin, can post) and the channel list stayed empty
+  with no diagnostic and no way back. Such promotions are now parked in
+  `tg_pending_channels` (shared `__webhook__` partition, keyed by promoting
+  `telegram_user_id`) and claimed by `_handle_start` on bind, so either order
+  works. The bind confirmation names the channels it picked up, and the sidebar
+  refreshes via the usual `channel_connected` event.
 - `can_post` was derived by reading `can_post_messages` unconditionally, but that
   admin right exists only on CHANNELS — in a group/supergroup it is absent from
   the admin record entirely, since posting there isn't an admin privilege. An
   admin bot in a supergroup was therefore stored as `can_post=false` and
-  `post_to_channel` refused a chat it could genuinely publish to. Both the
-  webhook path and the new manual path now go through `derive_can_post()`.
+  `post_to_channel` refused a chat it could genuinely publish to. All three paths
+  (webhook, parked, manual) now go through `derive_can_post()`.
 - `tg_error_message()` was being called with the whole response object instead of
   its `(status_code, description)` pair, which raised `TypeError: unhashable
   type: 'HTTPResponse'` instead of producing an error message — meaning any
@@ -32,20 +34,30 @@ All notable changes to Telegram Publisher are documented here.
 - Auto-discovery never persisted the channel's public `@username`, which
   `get_channel_recent_posts` and `generate_draft`'s tone sampling read off the
   stored record — so tone matching silently didn't work for auto-linked public
-  channels. Now saved on both paths.
+  channels. Now saved on every path.
 
 ### Added
 
-- `link_channel` — link a channel the bot was ALREADY an admin of, by `@username`,
-  numeric chat id, or a pasted `t.me/...` link. Necessary because
-  `my_chat_member` is a point-in-time event that Telegram never replays: a
-  channel the bot joined before the webhook existed produces no update, ever, and
-  is otherwise unrecoverable. Verifies against Telegram rather than trusting the
-  caller — `getChat` (chat visible to the bot), then `getChatAdministrators` +
-  `getMe` (bot really is an admin), then `derive_can_post` (it may actually post),
-  with a distinct error for each failure. This finally uses the
-  `get_chat_administrators`/`get_me` helpers, which were written for the webhook
-  handler but had never been called from anywhere.
+- `link_channel` — link a channel by `@username`, numeric chat id, or a pasted
+  `t.me/...` link. Fallback path only, for the one case that genuinely cannot be
+  automatic: the bot was made admin when no webhook existed at all (e.g. before
+  this extension was set up), so Telegram delivered nothing and, since updates
+  are never replayed and there is no "list my chats" method, nothing can be
+  re-requested. Verifies against Telegram rather than trusting the caller —
+  `getChat` (chat visible to the bot), then `getChatAdministrators` + `getMe`
+  (bot really is an admin), then `derive_can_post` (it may actually post) — with
+  a distinct error code per failure (`TG_CHAT_NOT_REACHABLE`,
+  `TG_BOT_NOT_ADMIN`, `TG_BOT_CANNOT_POST`).
+
+### Notes
+
+- No `setWebhook` call was added, deliberately. `my_chat_member` IS delivered
+  under `setWebhook`'s default `allowed_updates` — the default is "all types
+  except `chat_member`, `message_reaction`, `message_reaction_count`"; it is
+  `chat_member` (other users' membership) that must be requested explicitly, not
+  `my_chat_member` (the bot's own). Passing an explicit list would only narrow
+  delivery, and calling `setWebhook` from a per-user install hook would rewrite
+  the shared bot's webhook for every user on every install.
 
 ## [0.3.0] - 2026-07-24
 

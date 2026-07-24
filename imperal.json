@@ -287,7 +287,7 @@
     },
     {
       "name": "link_channel",
-      "description": "Link a Telegram channel the bot was ALREADY added to as admin, by its @username or numeric chat id. Use this when a channel doesn't appear in list_telegram_channels — typically because the bot was added to it before you connected Telegram here. Channels you add the bot to from now on are detected automatically.",
+      "description": "Link a Telegram channel the bot is ALREADY an admin of, by its @username or numeric chat id. Only needed as a fallback: channels are normally picked up automatically when you add the bot as admin — in either order, before or after connecting your Telegram account. Use this when a channel still doesn't appear in list_telegram_channels, e.g. the bot was added to it long before this extension was set up, so Telegram never delivered the event.",
       "action_type": "write",
       "chain_callable": true,
       "effects": [
@@ -297,7 +297,7 @@
       "params_schema": {
         "properties": {
           "channel": {
-            "description": "The channel to link, as its public @username (e.g. '@mychannel') or its numeric chat id (e.g. '-1001234567890'). Use this for a channel the bot was ALREADY added to as admin — channels added after connecting are picked up automatically and don't need this.",
+            "description": "The channel to link, as its public @username (e.g. '@mychannel') or its numeric chat id (e.g. '-1001234567890'). Fallback only — channels are normally discovered automatically when the bot is made admin; use this if one still isn't listed.",
             "title": "Channel",
             "type": "string"
           }
@@ -1042,14 +1042,8 @@
     }
   ],
   "lifecycle": {
-    "on_install": true,
     "health_check": {
       "interval_sec": 60
-    }
-  },
-  "lifecycle_hooks": {
-    "on_install": {
-      "signature": "(ctx) -> dict"
     }
   },
   "secrets": [

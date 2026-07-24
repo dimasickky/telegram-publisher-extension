@@ -67,7 +67,9 @@ Ask Webbee to connect Telegram — you'll get a one-tap deep link to `@ImperalCo
 
 In Telegram, open your channel/group → **Administrators** → add the bot → grant **Post Messages**. It shows up automatically the next time you list your channels.
 
-> **Added the bot before connecting here?** Then Telegram already fired (and discarded) the promotion event — it never replays it, so that channel can't be auto-detected. Link it once by name instead: `link_channel @yourchannel` (a numeric chat id or a `t.me/...` link works too). Everything you add from now on is picked up automatically.
+> **Order doesn't matter.** Add the bot as admin first and connect your Telegram account afterwards, or the other way round — a promotion that arrives before we know who you are is held and attached as soon as you tap Start.
+>
+> **A channel still missing?** That happens only if the bot was added back when this extension had no webhook at all: Telegram delivered nothing at the time, never replays updates, and the Bot API has no "list the chats I'm in" method — so it has to be named once: `link_channel @yourchannel` (a numeric chat id or a `t.me/...` link works too).
 
 ### 4. Publish
 

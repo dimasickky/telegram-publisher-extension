@@ -19,12 +19,21 @@ Flow:
    storage.find_and_consume_link_code, then storage.bind_telegram_user
    records the identity both ways (reverse index for future updates + the
    real user's own forward record).
-3. Later, when the user adds the bot as admin to a channel, Telegram sends a
+3. When the user adds the bot as admin to a channel, Telegram sends a
    `my_chat_member` update for that chat with `from.id` = the promoting
    Telegram user. `_handle_my_chat_member` resolves that user via
    storage.resolve_imperal_id_for_telegram_user and auto-saves a tg_channels
    record via storage.save_channel_record_for_user — the user never has to
-   manually paste a chat_id.
+   manually paste a chat_id. No explicit `allowed_updates` is needed for this:
+   `my_chat_member` is included in setWebhook's DEFAULT set ("all types except
+   chat_member, message_reaction, message_reaction_count"); it is `chat_member`,
+   about OTHER users' membership, that must be requested explicitly.
+4. Steps 2 and 3 can happen in EITHER order. If the bot is promoted first, there
+   is no imperal_id to attribute the chat to yet, so the update is parked in
+   `tg_pending_channels` (shared "__webhook__" partition) instead of being
+   dropped, and `_handle_start` claims it on bind. Dropping it used to make such
+   a channel unrecoverable — Telegram never replays updates, and the Bot API
+   exposes no method to enumerate the chats a bot belongs to.
 
 No HMAC needed for authenticity the way GitHub/Vikunja webhooks do —
 Telegram instead lets us set a `secret_token` on `setWebhook` that it echoes
@@ -71,15 +80,25 @@ class ConnectionStatusResult(BaseModel):
 
 
 async def _bot_username(ctx) -> str | None:
+    """Resolve the shared bot's @username, or None if it can't be determined.
+
+    Every failure mode returns None rather than raising: this runs inside the
+    sidebar's render path, where an exception blanks the whole panel instead of
+    showing the "not connected yet" state. Catching bare Exception is deliberate —
+    besides the RuntimeError for an unset token secret, ctx.http can raise
+    transport errors, and neither should take the panel down.
+    """
     try:
         resp = await tg.tg_call(ctx, "getMe")
-    except RuntimeError:
-        # telegram_bot_token secret not configured yet — treat like any other
-        # "can't build a link" case rather than raising through the panel render.
+    except Exception as e:  # unset token secret, transport failure, anything
+        log.warning("_bot_username: getMe failed: %s", e)
         return None
     if not tg.tg_ok(resp):
         return None
-    return tg.tg_result(resp).get("username")
+    # tg_result can be None even on ok:true if the payload lacks "result" —
+    # .get() straight off it would AttributeError inside the render.
+    result = tg.tg_result(resp) or {}
+    return result.get("username") or None
 
 
 async def create_connect_deep_link(ctx) -> str:
@@ -172,8 +191,8 @@ async def list_telegram_channels(ctx, params: _NoParams) -> ActionResult:
         return ActionResult.success(
             sdl.EntityList[TelegramChannel](items=[]),
             summary=(
-                "No channels linked yet — add the bot as admin to a channel after connecting "
-                "Telegram and it'll show up here automatically."
+                "No channels linked yet — add the bot as admin (with 'Post messages') to a "
+                "channel and it'll show up here automatically."
             ),
         )
     return ActionResult.success(
@@ -186,10 +205,12 @@ async def list_telegram_channels(ctx, params: _NoParams) -> ActionResult:
     "link_channel",
     action_type="write",
     description=(
-        "Link a Telegram channel the bot was ALREADY added to as admin, by its @username or "
-        "numeric chat id. Use this when a channel doesn't appear in list_telegram_channels — "
-        "typically because the bot was added to it before you connected Telegram here. "
-        "Channels you add the bot to from now on are detected automatically."
+        "Link a Telegram channel the bot is ALREADY an admin of, by its @username or numeric "
+        "chat id. Only needed as a fallback: channels are normally picked up automatically "
+        "when you add the bot as admin — in either order, before or after connecting your "
+        "Telegram account. Use this when a channel still doesn't appear in "
+        "list_telegram_channels, e.g. the bot was added to it long before this extension "
+        "was set up, so Telegram never delivered the event."
     ),
     effects=["telegram.link_channel"],
     event="telegram-publisher-extension.channel_connected",
@@ -198,12 +219,17 @@ async def list_telegram_channels(ctx, params: _NoParams) -> ActionResult:
 async def link_channel(ctx, params: LinkChannelParams) -> ActionResult:
     """Verify + store a channel the bot is already an admin of.
 
-    Exists because Telegram's `my_chat_member` update is strictly a point-in-time
-    event: it fires the moment the bot is promoted and is never replayed. A channel
-    the bot joined before this extension was deployed (or before the webhook
-    requested my_chat_member at all) is therefore invisible to auto-discovery
-    forever, with no way to recover it from the update stream. Asking Telegram
-    directly — getChat + getChatAdministrators — is the only path back.
+    Last-resort recovery path. `my_chat_member` is a point-in-time event: it fires
+    the moment the bot is promoted and is never replayed, and the Bot API has no
+    method to enumerate the chats a bot belongs to — so if no webhook existed when
+    the bot was added (e.g. the bot was in the channel before this extension was
+    ever deployed), nothing was delivered and nothing can be re-requested. Asking
+    Telegram about one specific chat — getChat + getChatAdministrators — is then
+    the only way back.
+
+    NOT needed for the ordinary "added the bot before running /start" case: those
+    updates ARE delivered and are parked in tg_pending_channels, then claimed
+    automatically on bind (see _handle_start).
 
     Verifies three things against Telegram itself rather than trusting the caller:
     the chat exists and the bot can see it, the bot is actually an administrator,
@@ -313,12 +339,33 @@ async def _handle_start(ctx, message: dict) -> None:
 
     await storage.bind_telegram_user(ctx, imperal_id, telegram_user_id, tg.now_iso())
 
+    # Drain anything parked before we knew who this Telegram user was. Adding the
+    # bot to a channel BEFORE running /start is a perfectly natural order, and
+    # those my_chat_member events used to be discarded — leaving the user with a
+    # correctly-configured bot and a permanently empty channel list, since
+    # Telegram never replays updates and offers no way to enumerate the bot's
+    # chats. Now they're claimed here, so either order works.
+    claimed = await storage.claim_pending_channels(ctx, imperal_id, telegram_user_id)
+    for record in claimed:
+        await _emit_for_user(ctx, imperal_id, "telegram-publisher-extension.channel_connected", {
+            "imperal_id": imperal_id, "chat_id": record.get("chat_id"),
+        })
+
+    if claimed:
+        names = ", ".join(f"\"{r.get('chat_title', r.get('chat_id'))}\"" for r in claimed)
+        tail = (
+            f" I also picked up the {'channel' if len(claimed) == 1 else 'channels'} you'd "
+            f"already added me to: {names}."
+        )
+    else:
+        tail = (
+            " Now add me as admin (with 'Post messages' permission) to any channel you want "
+            "Imperal to publish to — it'll show up automatically once you do."
+        )
+
     await tg.tg_call(ctx, "sendMessage", {
         "chat_id": telegram_user_id,
-        "text": (
-            "Connected! Now add me as admin (with 'Post messages' permission) to any channel "
-            "you want Imperal to publish to — it'll show up automatically once you do."
-        ),
+        "text": "Connected!" + tail,
     })
 
 
@@ -336,8 +383,22 @@ async def _handle_my_chat_member(ctx, update: dict) -> None:
 
     imperal_id = await storage.resolve_imperal_id_for_telegram_user(ctx, telegram_user_id)
     if not imperal_id:
-        # Bot was promoted/removed by someone who never linked their Telegram to us —
-        # nothing to attribute this channel to. Silently skip.
+        # The promoter hasn't run /start yet, so there is no imperal_id to attach
+        # this chat to — but discarding the event (what used to happen here) makes
+        # the channel unrecoverable: Telegram never replays updates and the Bot API
+        # has no method to list the chats a bot belongs to. Park it instead, keyed
+        # by the promoting telegram_user_id; _handle_start claims it on bind.
+        # Only worth parking if the bot actually became an admin — a demotion for
+        # an unknown user is nothing to remember.
+        if new_status in ("administrator", "creator"):
+            await storage.save_pending_channel(ctx, telegram_user_id, {
+                "chat_id": chat_id,
+                "chat_title": chat_obj.get("title", str(chat_id)),
+                "chat_type": chat_obj.get("type", ""),
+                "can_post": tg.derive_can_post(chat_obj.get("type", ""), new_member),
+                "linked_at": tg.now_iso(),
+                "chat_username": chat_obj.get("username", ""),
+            })
         return
 
     if new_status not in ("administrator", "creator"):

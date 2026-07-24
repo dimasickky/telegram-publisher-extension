@@ -166,10 +166,13 @@ async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
     if not tg.tg_ok(resp):
         return ActionResult.error(tg.tg_error_from(resp), code=TG_SEND_FAILED)
 
-    result = tg.tg_result(resp)
+    # Defensive: the message IS already sent at this point, so a shape surprise
+    # here must not surface as a failure — that would tell the user the post
+    # didn't go out while it actually did. Degrade to "posted, no deep link".
+    result = tg.tg_result(resp) or {}
     message_id = result.get("message_id", 0)
-    chat_username = result.get("chat", {}).get("username")
-    link = f"https://t.me/{chat_username}/{message_id}" if chat_username else None
+    chat_username = (result.get("chat") or {}).get("username")
+    link = f"https://t.me/{chat_username}/{message_id}" if chat_username and message_id else None
 
     return ActionResult.success(
         summary=f"Posted to \"{record.get('chat_title', params.channel_id)}\".",

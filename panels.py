@@ -63,20 +63,20 @@ async def sidebar(ctx, **kwargs):
     ])
 
     if not channels:
-        # Two distinct reasons this list can be empty, and the difference matters
-        # to the user: either the bot hasn't been added anywhere yet (auto-discovery
-        # will handle it), or it WAS added before this extension could register its
-        # webhook — in which case Telegram never sent my_chat_member and never will,
-        # so the channel can only be picked up by asking for it explicitly.
+        # Distinguish the ordinary case from the genuinely stuck one. Adding the bot
+        # before connecting Telegram is now handled automatically (the promotion event
+        # is parked in tg_pending_channels and claimed on bind), so the only case left
+        # needing a manual nudge is a channel the bot joined when no webhook existed at
+        # all — Telegram delivered nothing then, never replays updates, and offers no
+        # method to list a bot's chats, so it has to be named explicitly.
         body = ui.Stack(gap=2, children=[
             ui.Empty(
                 message="No channels yet — add the bot as admin (with 'Post messages') "
                         "to any channel or group and it'll show up here automatically."
             ),
             ui.Text(
-                "Already added the bot earlier and it's still not here? Ask in chat: "
-                "\"link @yourchannel\" — channels added before connecting have to be "
-                "linked once by name.",
+                "Added the bot long ago and it's still missing? Ask in chat: "
+                "\"link @yourchannel\".",
                 variant="caption",
             ),
         ])

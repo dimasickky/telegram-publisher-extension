@@ -26,6 +26,7 @@ LINK_CODES_COLLECTION = "tg_link_codes"          # shared "__webhook__" partitio
 USER_INDEX_COLLECTION = "tg_user_index"          # shared "__webhook__" partition
 USER_LINK_COLLECTION = "tg_user_link"            # per-user own partition
 CHANNELS_COLLECTION = "tg_channels"              # per-user own partition
+PENDING_CHANNELS_COLLECTION = "tg_pending_channels"  # shared "__webhook__" partition
 
 
 def _store_for(ctx, user_id: str):
@@ -196,6 +197,83 @@ async def save_channel_record_for_user(webhook_ctx, imperal_id: str, record: dic
         await store.update(CHANNELS_COLLECTION, existing.id, record)
     else:
         await store.create(CHANNELS_COLLECTION, record)
+
+
+async def save_pending_channel(webhook_ctx, telegram_user_id: int, record: dict) -> None:
+    """Park a my_chat_member event whose promoter has no imperal_id yet.
+
+    Telegram delivers the promotion event the instant the bot is made admin, but
+    a user can legitimately do that BEFORE running /start here — nothing forces
+    the order. Previously that update was dropped on the floor, and because
+    Telegram never replays updates (and the Bot API has no "list my chats"
+    method at all) the channel became permanently invisible: the user had added
+    the bot correctly, yet the list stayed empty forever with no way back.
+
+    So instead of discarding it we park the record here, keyed by the promoting
+    telegram_user_id, in the shared "__webhook__" partition — the only partition
+    the unauthenticated webhook can write to before it knows who the user is.
+    claim_pending_channels() drains it once /start binds the identity.
+
+    Keyed on (telegram_user_id, chat_id) so repeated promote/demote churn
+    updates one row rather than piling up duplicates.
+    """
+    import time as _time
+    store = _store_for(webhook_ctx, "__webhook__")
+    page = await store.query(PENDING_CHANNELS_COLLECTION, limit=200)
+    payload = {
+        "telegram_user_id": telegram_user_id,
+        "chat_id": record.get("chat_id"),
+        "record": record,
+        "created_ts": _time.time(),
+    }
+    for doc in page.data:
+        if (doc.data.get("telegram_user_id") == telegram_user_id
+                and str(doc.data.get("chat_id")) == str(record.get("chat_id"))):
+            await store.update(PENDING_CHANNELS_COLLECTION, doc.id, payload)
+            return
+    await store.create(PENDING_CHANNELS_COLLECTION, payload)
+
+
+async def claim_pending_channels(webhook_ctx, imperal_id: str, telegram_user_id: int,
+                                 ttl_seconds: int = 30 * 24 * 3600) -> list[dict]:
+    """Move every parked channel for this telegram_user_id into the real user's
+    own partition. Called right after bind_telegram_user, so a user who added
+    the bot first and ran /start second still ends up with their channels.
+
+    Returns the claimed records so the caller can emit panel-refresh events for
+    each. Deletes as it goes — a parked row is one-shot, exactly like a link
+    code, so a later re-bind can't resurrect a channel the bot has since left.
+
+    Also expires stale rows (TTL enforced here, same as find_and_consume_link_code
+    does for codes). Without it this collection would grow forever: a promotion by
+    someone who never connects leaves a row nobody ever claims, and since it lives
+    in the shared "__webhook__" partition that every query here pages through, the
+    junk would eventually crowd out live link codes. 30 days is deliberately
+    generous — "added the bot, connected weeks later" must still work; a record
+    older than that is better re-derived via link_channel than trusted, since the
+    bot may well have been removed from the chat since.
+    """
+    import time as _time
+    store = _store_for(webhook_ctx, "__webhook__")
+    page = await store.query(PENDING_CHANNELS_COLLECTION, limit=200)
+    now = _time.time()
+    claimed: list[dict] = []
+    for doc in page.data:
+        created_ts = doc.data.get("created_ts", 0)
+        expired = bool(created_ts) and (now - created_ts) > ttl_seconds
+        mine = doc.data.get("telegram_user_id") == telegram_user_id
+        if not mine and not expired:
+            continue
+        # Drop expired rows regardless of owner — this is the only sweep there is.
+        await store.delete(PENDING_CHANNELS_COLLECTION, doc.id)
+        if not mine or expired:
+            continue
+        record = doc.data.get("record") or {}
+        if not record.get("chat_id"):
+            continue
+        await save_channel_record_for_user(webhook_ctx, imperal_id, record)
+        claimed.append(record)
+    return claimed
 
 
 async def delete_channel_record(ctx, chat_id) -> bool:
