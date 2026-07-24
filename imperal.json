@@ -2,7 +2,7 @@
   "manifest_schema_version": 3,
   "sdk_version": "5.9.12",
   "app_id": "telegram-publisher-extension",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "name": "Telegram Publisher",
   "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
   "icon": "icon.svg",
@@ -287,7 +287,7 @@
     },
     {
       "name": "post_to_channel",
-      "description": "Publish a post to one of your linked Telegram channels. Optionally attach a photo by URL. Requires the bot to have 'Post messages' permission on that channel.",
+      "description": "Publish a post to one of your linked Telegram channels. Optionally attach a photo by URL. Requires the bot to have 'Post messages' permission on that channel. First call (confirm=false, the default) only shows a draft preview of the post and where it will go — nothing is sent to Telegram until you call it again with confirm=true.",
       "action_type": "write",
       "chain_callable": true,
       "effects": [
@@ -323,6 +323,12 @@
             "default": false,
             "description": "Suppress link preview card for URLs in the text",
             "title": "Disable Preview",
+            "type": "boolean"
+          },
+          "confirm": {
+            "default": false,
+            "description": "Must be explicitly set true to actually publish. First call (confirm=false, the default) only previews what will be posted and where — shows the rendered text/photo and the target channel — and does not contact Telegram at all. Call again with confirm=true, same arguments, once the preview looks right.",
+            "title": "Confirm",
             "type": "boolean"
           }
         },
@@ -424,6 +430,11 @@
             ],
             "default": null,
             "title": "Link"
+          },
+          "needs_confirmation": {
+            "default": false,
+            "title": "Needs Confirmation",
+            "type": "boolean"
           }
         },
         "required": [

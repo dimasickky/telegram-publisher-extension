@@ -16,7 +16,7 @@ belt-and-suspenders:
 """
 import logging
 
-from imperal_sdk import ActionResult
+from imperal_sdk import ActionResult, ui
 
 from app import chat
 from models import PostToChannelParams, ChannelIdParams, PostResult, DisconnectResult
@@ -27,19 +27,51 @@ import telegram_client as tg
 log = logging.getLogger("telegram-publisher")
 
 
+def _preview_ui(record: dict, params: PostToChannelParams):
+    """Render exactly what post_to_channel would send, so the draft looks the
+    same in chat as the real Telegram post would: same HTML subset, same
+    photo (if any), plus the confirmation reminder itself."""
+    chat_title = record.get("chat_title", params.channel_id)
+    children = [
+        ui.Stack(direction="h", gap=2, children=[
+            ui.Icon("Send"),
+            ui.Text(f"Draft \u2192 \"{chat_title}\""),
+        ]),
+    ]
+    if params.photo_url:
+        children.append(ui.Image(src=params.photo_url, alt="Post photo"))
+    children.append(ui.Html(content=params.text or "<i>(empty)</i>", theme="dark"))
+    children.append(ui.Alert(
+        title="Not sent yet",
+        message="This is a preview only — nothing has been posted to Telegram. "
+                "Call post_to_channel again with confirm=true to actually publish it.",
+        type="info",
+    ))
+    return ui.Stack(gap=3, children=children)
+
+
 @chat.function(
     "post_to_channel",
     action_type="write",
     description=(
         "Publish a post to one of your linked Telegram channels. Optionally attach a photo "
-        "by URL. Requires the bot to have 'Post messages' permission on that channel."
+        "by URL. Requires the bot to have 'Post messages' permission on that channel. "
+        "First call (confirm=false, the default) only shows a draft preview of the post and "
+        "where it will go — nothing is sent to Telegram until you call it again with confirm=true."
     ),
     effects=["telegram.post"],
     event="telegram-publisher-extension.post_published",
     data_model=PostResult,
 )
 async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
-    """Send a text or photo post to a linked channel, after pre-flight can_post check."""
+    """Send a text or photo post to a linked channel, after pre-flight can_post check.
+
+    Own explicit two-step confirm-flow (same pattern as github-connector's
+    merge_pull_request/delete_branch): the first call (confirm=false, the
+    default) renders a draft preview — exactly what will be posted and to
+    which channel — and never touches the Telegram API. Only a second call
+    with confirm=true actually calls sendMessage/sendPhoto.
+    """
     record = await storage.get_channel_record(ctx, params.channel_id)
     if not record:
         return ActionResult.error(
@@ -57,6 +89,23 @@ async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
         return ActionResult.error(
             "Post text is too long (Telegram's limit is 4096 characters) — shorten it and try again.",
             code="TG_MESSAGE_TOO_LONG",
+        )
+
+    if not params.confirm:
+        await ctx.log(
+            f"post_to_channel: preview only (awaiting confirm) \u2014 channel '{params.channel_id}'",
+            level="info",
+        )
+        return ActionResult.success(
+            PostResult(
+                id=params.channel_id, title="Draft", kind="telegram_post_draft",
+                channel_id=params.channel_id, needs_confirmation=True,
+            ),
+            summary=(
+                f"Draft ready for \"{record.get('chat_title', params.channel_id)}\" \u2014 nothing sent yet. "
+                "Call again with confirm=true to publish it."
+            ),
+            ui=_preview_ui(record, params),
         )
 
     try:

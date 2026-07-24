@@ -2,6 +2,22 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## [0.2.0] - 2026-07-24
+
+### Changed
+
+- `post_to_channel` now has an explicit two-step confirm flow, same pattern as
+  github-connector's destructive tools (`delete_branch`/`merge_pull_request`):
+  the first call (`confirm=false`, the default) renders a draft preview in
+  chat — the actual HTML-formatted text, the photo if any, and which channel
+  it targets — and does **not** contact Telegram at all. Only a second call
+  with `confirm=true` (same arguments) actually publishes. `PostResult` gained
+  a `needs_confirmation` field to reflect which state a given response is.
+- Rationale: Telegram's HTML subset is limited (b/i/u/s/a/code/pre/blockquote/
+  spoiler only) — seeing the rendered draft before it goes live catches a bad
+  render (wrong formatting, wrong channel) before the post is public, instead
+  of after, when it would need a manual delete/edit in the channel itself.
+
 ## [0.1.0] - 2026-07-22
 
 ### Added

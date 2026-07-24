@@ -30,6 +30,15 @@ class PostToChannelParams(BaseModel):
     ))
     photo_url: str | None = Field(default=None, description="Optional public image URL to attach as a photo post (caption = text)")
     disable_preview: bool = Field(default=False, description="Suppress link preview card for URLs in the text")
+    confirm: bool = Field(
+        default=False,
+        description=(
+            "Must be explicitly set true to actually publish. First call (confirm=false, the "
+            "default) only previews what will be posted and where — shows the rendered text/photo "
+            "and the target channel — and does not contact Telegram at all. Call again with "
+            "confirm=true, same arguments, once the preview looks right."
+        ),
+    )
 
 
 class GetRecentPostsParams(BaseModel):
@@ -60,6 +69,7 @@ class PostResult(sdl.Entity):
     channel_id: str = ""
     message_id: int = 0
     link: str | None = None
+    needs_confirmation: bool = False
 
 
 class DisconnectResult(sdl.Entity):
