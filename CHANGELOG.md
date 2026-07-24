@@ -2,6 +2,26 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## [0.3.0] - 2026-07-24
+
+### Added
+
+- `generate_draft` — writes a channel post from a short brief using the SDK's
+  `ctx.ai.complete()` bridge (same call shape as sql-db's `nl_to_sql` / tasks'
+  `ai_breakdown_task`). If the target channel is public, it samples the
+  channel's own recent posts (reusing `handlers_read`'s `t.me/s/` scraper) to
+  match its existing tone instead of writing generically; private channels
+  (no history available) skip sampling and just write to the brief. The
+  prompt bakes in Telegram's hard constraints up front — the limited HTML
+  subset and the correct character cap (4096 text / 1024 photo caption) — so
+  the result is postable as-is straight into `post_to_channel`.
+- `post_to_channel` preview call now also has the bot itself DM the linked
+  Telegram user the same draft (best-effort, fire-and-forget — a DM failure
+  never turns a successful preview into an error), so the draft is seen from
+  inside the actual publishing bot's chat, not only as a card in Imperal's UI.
+  Confirmation still happens back in chat (`confirm=true`), not via any
+  in-Telegram button — kept deliberately simple, no `callback_query` handling.
+
 ## [0.2.0] - 2026-07-24
 
 ### Changed

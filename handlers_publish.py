@@ -50,6 +50,45 @@ def _preview_ui(record: dict, params: PostToChannelParams):
     return ui.Stack(gap=3, children=children)
 
 
+async def _dm_draft_to_user(ctx, record: dict, params: PostToChannelParams) -> None:
+    """Best-effort: have the SAME bot that will actually publish the post also
+    DM the linked Telegram user a plain-text draft of it and where it's
+    headed — no inline buttons, just a message, since confirmation stays in
+    chat with Webbee (a second post_to_channel call with confirm=true). This
+    is purely so the draft is seen from inside the bot's own chat, not only
+    as a card in the Imperal chat UI.
+
+    Fire-and-forget by design: the in-chat preview (_preview_ui, already
+    rendered by the caller) is the source of truth for the ActionResult — a
+    failure to DM (user never linked telegram_user_id, blocked the bot,
+    transport hiccup) must never turn a successful preview into an error, so
+    any failure here is only logged, never raised or returned.
+    """
+    try:
+        link = await storage.get_telegram_user_link(ctx)
+        if not link or not link.get("telegram_user_id"):
+            return  # user never linked their Telegram account to this bot — nothing to DM
+        chat_title = record.get("chat_title", params.channel_id)
+        lines = [f"\U0001F4DD Draft \u2014 will post to \u201c{chat_title}\u201d:", ""]
+        lines.append(params.text or "(empty)")
+        lines.append("")
+        lines.append(
+            "Not sent yet. Confirm back in chat with Webbee to actually publish it."
+        )
+        text = "\n".join(lines)
+        if params.photo_url:
+            await tg.tg_call(ctx, "sendPhoto", {
+                "chat_id": link["telegram_user_id"], "photo": params.photo_url,
+                "caption": text[:1024], "parse_mode": "HTML",
+            })
+        else:
+            await tg.tg_call(ctx, "sendMessage", {
+                "chat_id": link["telegram_user_id"], "text": text[:4096], "parse_mode": "HTML",
+            })
+    except Exception as e:
+        log.warning("post_to_channel: could not DM draft to linked user: %s", e)
+
+
 @chat.function(
     "post_to_channel",
     action_type="write",
@@ -96,6 +135,7 @@ async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
             f"post_to_channel: preview only (awaiting confirm) \u2014 channel '{params.channel_id}'",
             level="info",
         )
+        await _dm_draft_to_user(ctx, record, params)
         return ActionResult.success(
             PostResult(
                 id=params.channel_id, title="Draft", kind="telegram_post_draft",

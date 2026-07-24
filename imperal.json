@@ -2,7 +2,7 @@
   "manifest_schema_version": 3,
   "sdk_version": "5.9.12",
   "app_id": "telegram-publisher-extension",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "name": "Telegram Publisher",
   "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
   "icon": "icon.svg",
@@ -746,6 +746,152 @@
         "title": "EntityList[TelegramPost]",
         "type": "object",
         "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-publisher"
+    },
+    {
+      "name": "generate_draft",
+      "description": "Generate a draft post for a linked Telegram channel from a brief/topic — written within Telegram's own posting limits (character cap, limited HTML subset), and optionally matched to the channel's own tone by sampling its recent public posts. Does not post anything — hand the returned text straight to post_to_channel (confirm=false first) to preview and then publish it.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "channel_id": {
+            "description": "Channel id from a previous list_telegram_channels call — never invent it",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "brief": {
+            "description": "What the post should say/announce — a topic, brief, or rough draft in plain language",
+            "title": "Brief",
+            "type": "string"
+          },
+          "has_photo": {
+            "default": false,
+            "description": "Whether this draft will be posted with a photo attached — caps the text at Telegram's shorter caption limit (1024 chars) instead of the full message limit (4096)",
+            "title": "Has Photo",
+            "type": "boolean"
+          },
+          "sample_size": {
+            "default": 10,
+            "description": "How many recent public posts to sample for tone/style matching (0 = skip tone matching, just write to the brief)",
+            "maximum": 50,
+            "minimum": 0,
+            "title": "Sample Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channel_id",
+          "brief"
+        ],
+        "title": "GenerateDraftParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "channel_id": {
+            "default": "",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          },
+          "based_on_sample": {
+            "default": false,
+            "title": "Based On Sample",
+            "type": "boolean"
+          },
+          "sample_count": {
+            "default": 0,
+            "title": "Sample Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "DraftResult",
+        "type": "object",
+        "x-sdl": "entity"
       },
       "event": "",
       "background": false,

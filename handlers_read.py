@@ -49,6 +49,32 @@ def _strip_tags(fragment: str) -> str:
     return html.unescape(text).strip()
 
 
+async def _fetch_recent_post_texts(ctx, record: dict, limit: int) -> tuple[list[str], str]:
+    """Shared fetch+parse of https://t.me/s/<username> — used by both
+    get_channel_recent_posts (returns SDL entities) and generate_draft (needs
+    plain strings to build a tone-matching LLM prompt). Returns
+    (texts, reason_if_empty) — reason is "" when texts were found.
+    """
+    username = (record.get("chat_username") or "").lstrip("@")
+    if not username:
+        return [], (
+            "This channel has no public @username, so it has no t.me/s/ preview page. "
+            "Only posts made after linking could ever be visible here, and that live-archive "
+            "ingest isn't built yet."
+        )
+
+    resp = await ctx.http.get(f"https://t.me/s/{username}")
+    body = resp.body if hasattr(resp, "body") else str(resp)
+    if not isinstance(body, str):
+        return [], "Unexpected response reading the public preview page."
+
+    blocks = _POST_BLOCK_RE.findall(body)[-limit:]
+    texts = [_strip_tags(b) for b in blocks if _strip_tags(b)]
+    if not texts:
+        return [], "No parsable posts found on the public preview page."
+    return texts, ""
+
+
 @chat.function(
     "get_channel_recent_posts",
     action_type="read",
@@ -66,29 +92,15 @@ async def get_channel_recent_posts(ctx, params: GetRecentPostsParams) -> ActionR
         return ActionResult.error("Channel not found — check list_telegram_channels first.",
                                   retryable=False, code=TG_CHANNEL_NOT_FOUND)
 
-    username = (record.get("chat_username") or "").lstrip("@")
-    if not username:
-        return ActionResult.success(
-            sdl.EntityList[TelegramPost](items=[]),
-            summary=(
-                "This channel has no public @username, so it has no t.me/s/ preview page. "
-                "Only posts made after linking could ever be visible here, and that live-archive "
-                "ingest isn't built yet."
-            ),
-        )
+    texts, reason = await _fetch_recent_post_texts(ctx, record, params.limit)
+    if not texts:
+        return ActionResult.success(sdl.EntityList[TelegramPost](items=[]), summary=reason)
 
-    resp = await ctx.http.get(f"https://t.me/s/{username}")
-    body = resp.body if hasattr(resp, "body") else str(resp)
-    if not isinstance(body, str):
-        return ActionResult.success(sdl.EntityList[TelegramPost](items=[]),
-                                    summary="Unexpected response reading the public preview page.")
-
-    blocks = _POST_BLOCK_RE.findall(body)[-params.limit:]
     posts = [
-        TelegramPost(id=str(i), title=_strip_tags(b)[:80] or "(untitled)", kind="telegram_post",
-                    text=_strip_tags(b))
-        for i, b in enumerate(blocks)
+        TelegramPost(id=str(i), title=t[:80] or "(untitled)", kind="telegram_post", text=t)
+        for i, t in enumerate(texts)
     ]
+    username = (record.get("chat_username") or "").lstrip("@")
     return ActionResult.success(
         sdl.EntityList[TelegramPost](items=posts),
         summary=f"{len(posts)} recent post(s) from the public preview page (source: t.me/s/{username}).",

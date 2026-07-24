@@ -21,10 +21,12 @@ def make_ctx(user_id="user-1"):
     return ctx
 
 
-async def seed_channel(ctx, chat_id="-100123", chat_title="Test Channel", can_post=True):
+async def seed_channel(ctx, chat_id="-100123", chat_title="Test Channel", can_post=True,
+                        chat_username=""):
     """Write a tg_channels record directly into the user's own store partition,
     the same shape save_channel_record_for_user would produce."""
     await ctx.store.create("tg_channels", {
         "chat_id": chat_id, "chat_title": chat_title, "chat_type": "channel",
         "can_post": can_post, "linked_at": "2026-07-24T00:00:00Z",
+        "chat_username": chat_username,
     })

@@ -23,7 +23,7 @@ from imperal_sdk import Extension, ChatExtension
 
 ext = Extension(
     "telegram-publisher-extension",
-    version="0.2.0",
+    version="0.3.0",
     capabilities=["telegram-publisher-extension:read", "telegram-publisher-extension:write"],
     display_name="Telegram Publisher",
     description="Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",

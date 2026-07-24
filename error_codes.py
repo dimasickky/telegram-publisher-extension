@@ -14,3 +14,4 @@ TG_BOT_CANNOT_POST = "TG_BOT_CANNOT_POST"           # bot is admin but lacks can
 TG_BOT_UNREACHABLE = "TG_BOT_UNREACHABLE"           # network/transport failure calling api.telegram.org
 TG_SEND_FAILED = "TG_SEND_FAILED"                   # Bot API returned ok:false on sendMessage/sendPhoto
 TG_MESSAGE_TOO_LONG = "TG_MESSAGE_TOO_LONG"          # text exceeds Telegram's post length limits after split
+TG_DRAFT_GENERATION_FAILED = "TG_DRAFT_GENERATION_FAILED"  # ctx.ai.complete() failed or returned empty text
