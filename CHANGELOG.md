@@ -2,6 +2,45 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## [0.5.0] - 2026-07-24
+
+### Security
+
+- **`link_channel` never checked that the caller had any claim to the channel.**
+  It verified the BOT was an admin — but the bot identity is an app-scope secret
+  shared by every Imperal user, so "the bot is an admin here" says nothing about
+  who is asking. Knowing a public @username was therefore enough for any user to
+  link someone else's channel to their own account and publish into it: the bot's
+  own admin rights would carry the request out. Now the caller's linked Telegram
+  account must itself appear in `getChatAdministrators` for that chat (creators
+  included), checked before the bot's own rights. The webhook path never had this
+  hole — it attributes a channel to `my_chat_member.from`, the person who actually
+  performed the promotion.
+
+### Fixed
+
+- **Draft previews could silently never arrive.** The preview DM is our own
+  framing wrapped around the author's text, but it was sent with
+  `parse_mode: HTML` — so any markup outside Telegram's narrow subset (an
+  unclosed tag, a heading, a list) made the whole `sendMessage` fail. Since the
+  DM helper swallows every exception by design (a failed DM must not turn a
+  successful preview into an error), the draft then vanished with no trace: the
+  post published fine on confirm, but the author never saw it first. Sent as plain
+  text now, which is what a draft should show anyway — markup included.
+- **Drafts came out far too short.** The prompt stated only Telegram's hard cap
+  ("max 4096 characters"), and a ceiling is not a goal: output landed at three
+  terse paragraphs that read like placeholders in a real feed. It now states a
+  target range (900–1500 chars, 600–950 for photo captions) plus the shape a post
+  that length should have — hook, context, why it matters, lead-in to the link —
+  while explicitly forbidding padding. The tone-matching block no longer tells the
+  model to match the samples' *length*, which would have perpetuated short posts
+  in a channel that already had them.
+- The two-step draft→confirm flow was described as "first call previews" but
+  nothing stopped a caller passing `confirm=true` immediately, publishing straight
+  to a public channel with no preview. The tool and parameter descriptions now
+  state that a go-ahead authorises the DRAFT, not the publication, and that every
+  post in a batch must be drafted first.
+
 ## [0.4.0] - 2026-07-24
 
 ### Fixed

@@ -73,7 +73,12 @@ async def test_link_channel_rejects_when_bot_not_admin():
     ctx = await _linked_ctx()
     ctx.http.mock_post("/getChatAdministrators", {
         "ok": True,
-        "result": [{"user": {"id": 555}, "status": "administrator"}],  # not our bot
+        # The CALLER is an admin (so the authorisation check passes and we reach
+        # the bot check), but our bot is not in the list.
+        "result": [
+            {"user": {"id": 428365104}, "status": "creator"},
+            {"user": {"id": 555}, "status": "administrator"},  # not our bot
+        ],
     })
     ctx.http.mock_post("/getMe", {"ok": True, "result": {"id": 999, "username": "bot"}})
     ctx.http.mock_post("/getChat", {
@@ -276,20 +281,137 @@ async def test_expired_row_is_not_claimed_by_its_owner():
     assert left.data == []
 
 
+@pytest.mark.asyncio
+async def test_link_channel_rejects_caller_who_is_not_a_chat_admin():
+    """The bot identity is shared by every Imperal user, so "the bot is admin
+    here" must NOT be enough to link a chat: otherwise knowing a public
+    @username would let anyone attach someone else's channel to their own
+    account and publish into it using the bot's rights."""
+    ctx = await _linked_ctx()
+    _mock_chat_admin(ctx, chat_type="channel", can_post_messages=True,
+                     caller_is_admin=False)
+
+    result = await handlers_connect.link_channel(
+        ctx, LinkChannelParams(channel="@mychannel"))
+
+    assert result.status == "error"
+    assert result.error_code == "TG_NOT_CHANNEL_ADMIN"
+    # and nothing was stored
+    page = await ctx.store.query("tg_channels", limit=10)
+    assert page.data == []
+
+
+@pytest.mark.asyncio
+async def test_two_users_linking_same_channel_are_independent():
+    """Both admins of one channel may link it; each gets their own record in
+    their own partition, and neither overwrites or disconnects the other."""
+    ctx_a = await _linked_ctx()
+    _mock_chat_admin(ctx_a, chat_type="channel", can_post_messages=True)
+    res_a = await handlers_connect.link_channel(
+        ctx_a, LinkChannelParams(channel="@mychannel"))
+    assert res_a.status == "success"
+
+    ctx_b = make_ctx(user_id="user-2")
+    await ctx_b.store.create(storage.USER_LINK_COLLECTION, {
+        "telegram_user_id": 777, "linked_at": "2026-07-24T00:00:00Z",
+    })
+    bot_member = {"user": {"id": 999}, "status": "administrator",
+                  "can_post_messages": True}
+    ctx_b.http.mock_post("/getChatAdministrators", {"ok": True, "result": [
+        bot_member, {"user": {"id": 777}, "status": "administrator"}]})
+    ctx_b.http.mock_post("/getMe", {"ok": True, "result": {"id": 999, "username": "bot"}})
+    ctx_b.http.mock_post("/getChat", {"ok": True, "result": {
+        "id": -1001234567890, "title": "My Channel", "type": "channel",
+        "username": "mychannel"}})
+    res_b = await handlers_connect.link_channel(
+        ctx_b, LinkChannelParams(channel="@mychannel"))
+    assert res_b.status == "success"
+
+    a_rows = await ctx_a.store.query("tg_channels", limit=10)
+    b_rows = await ctx_b.store.query("tg_channels", limit=10)
+    assert len(a_rows.data) == 1 and len(b_rows.data) == 1
+    assert a_rows.data[0].data["chat_id"] == b_rows.data[0].data["chat_id"]
+
+
+# ── multi-user: the bot is shared, ownership is not ────────────────────────── #
+
+@pytest.mark.asyncio
+async def test_two_users_can_each_hold_the_same_channel_independently():
+    """Two admins of the same channel both linking it is a normal situation, not a
+    conflict: the bot identity is shared, but records live per user."""
+    ctx_a = make_ctx(user_id="user-a")
+    ctx_b = make_ctx(user_id="user-b")
+
+    record = {"chat_id": -1001234567890, "chat_title": "Shared Channel",
+              "chat_type": "channel", "can_post": True, "linked_at": "x",
+              "chat_username": "shared"}
+    await storage.save_channel_record_for_user(ctx_a, "imp_u_a", dict(record))
+    await storage.save_channel_record_for_user(ctx_b, "imp_u_b", dict(record))
+
+    a = await ctx_a.store.query(storage.CHANNELS_COLLECTION, limit=10)
+    b = await ctx_b.store.query(storage.CHANNELS_COLLECTION, limit=10)
+    assert len(a.data) == 1 and len(b.data) == 1
+    assert a.data[0].id != b.data[0].id, "separate records, separate partitions"
+
+
+@pytest.mark.asyncio
+async def test_one_user_losing_the_bot_does_not_disconnect_the_other():
+    """A demotion reported for one user must not flip anyone else's record."""
+    ctx_a = make_ctx(user_id="user-a")
+    ctx_b = make_ctx(user_id="user-b")
+    record = {"chat_id": -1001234567890, "chat_title": "Shared Channel",
+              "chat_type": "channel", "can_post": True, "linked_at": "x"}
+    await storage.save_channel_record_for_user(ctx_a, "imp_u_a", dict(record))
+    await storage.save_channel_record_for_user(ctx_b, "imp_u_b", dict(record))
+
+    await storage.mark_channel_disconnected_for_user(ctx_a, "imp_u_a", -1001234567890)
+
+    a = await ctx_a.store.query(storage.CHANNELS_COLLECTION, limit=10)
+    b = await ctx_b.store.query(storage.CHANNELS_COLLECTION, limit=10)
+    assert a.data[0].data["can_post"] is False
+    assert b.data[0].data["can_post"] is True, "other user's link is untouched"
+
+
+@pytest.mark.asyncio
+async def test_link_channel_refuses_a_channel_the_caller_does_not_administer():
+    """The shared-bot authorisation hole: without this check, knowing a public
+    @username would let anyone link someone else's channel and post into it."""
+    ctx = await _linked_ctx()
+    _mock_chat_admin(ctx, chat_type="channel", can_post_messages=True,
+                     caller_is_admin=False)
+
+    result = await handlers_connect.link_channel(
+        ctx, LinkChannelParams(channel="@someoneelseschannel"))
+
+    assert result.status == "error"
+    assert result.error_code == "TG_NOT_CHANNEL_ADMIN"
+    page = await ctx.store.query(storage.CHANNELS_COLLECTION, limit=10)
+    assert page.data == [], "nothing may be stored for a channel that isn't yours"
+
+
 # ── helpers ───────────────────────────────────────────────────────────────── #
 
-def _mock_chat_admin(ctx, chat_type: str, can_post_messages):
+def _mock_chat_admin(ctx, chat_type: str, can_post_messages, caller_is_admin: bool = True):
     """Mock the getChat + getMe + getChatAdministrators trio link_channel makes.
 
     getChatAdministrators is registered FIRST because MockHTTP matches on
     substring and returns the first hit — "/getChat" would otherwise also match
     the getChatAdministrators URL and hand back the wrong payload.
+
+    The admin list carries BOTH the bot and (by default) the calling user: the
+    bot being admin authorises the POST, the caller being admin authorises the
+    LINK. caller_is_admin=False models someone trying to link a channel that
+    isn't theirs.
     """
     bot_member = {"user": {"id": 999}, "status": "administrator"}
     if can_post_messages is not None:
         bot_member["can_post_messages"] = can_post_messages
 
-    ctx.http.mock_post("/getChatAdministrators", {"ok": True, "result": [bot_member]})
+    admins = [bot_member]
+    if caller_is_admin:
+        admins.append({"user": {"id": 428365104}, "status": "creator"})
+
+    ctx.http.mock_post("/getChatAdministrators", {"ok": True, "result": admins})
     ctx.http.mock_post("/getMe", {"ok": True, "result": {"id": 999, "username": "bot"}})
     ctx.http.mock_post("/getChat", {
         "ok": True,

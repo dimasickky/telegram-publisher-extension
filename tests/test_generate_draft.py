@@ -74,3 +74,36 @@ async def test_generate_draft_photo_uses_caption_limit():
         ctx, GenerateDraftParams(channel_id="-100123", brief="photo", has_photo=True, sample_size=0))
     assert result.status == "success"
     assert len(result.data.text) == 1024
+
+# ── prompt shape: length is a TARGET, not just a ceiling ──────────────────── #
+
+def test_prompt_states_a_target_length_not_only_the_cap():
+    """With only "max N characters" in the prompt, the model lands far under it and
+    produces three-sentence stubs that read like placeholders in a real feed. The
+    cap is a hard limit; the desired length has to be stated separately."""
+    prompt = handlers_generate._build_prompt("about a footballer", 4096, [])
+    assert "4096" in prompt, "the hard cap is still declared"
+    assert "900" in prompt and "1500" in prompt, "a target range is declared too"
+    assert "TARGET, not the limit" in prompt
+
+
+def test_prompt_asks_for_the_hook_context_why_link_shape():
+    prompt = handlers_generate._build_prompt("about a footballer", 4096, [])
+    for expected in ("hook", "context", "why it matters", "close with"):
+        assert expected in prompt, f"prompt should ask for: {expected}"
+    assert "Never pad" in prompt, "length must not be reached by padding"
+
+
+def test_photo_caption_target_fits_the_shorter_cap():
+    """A photo post is capped at 1024, so the 900-1500 target would exceed it."""
+    prompt = handlers_generate._build_prompt("about a footballer", 1024, [])
+    assert "600" in prompt and "950" in prompt
+    assert "1500" not in prompt
+
+
+def test_sample_tone_matching_does_not_override_the_length_target():
+    """Style samples say "match their length" — if the channel's existing posts are
+    short stubs, that instruction would perpetuate exactly the problem."""
+    prompt = handlers_generate._build_prompt("x", 4096, ["tiny post"])
+    assert "tone" in prompt.lower()
+    assert "TARGET, not the limit" in prompt

@@ -29,6 +29,13 @@ _ALLOWED_TAGS = "b, i, u, s, a, code, pre, blockquote, spoiler"
 
 
 def _build_prompt(brief: str, char_limit: int, samples: list[str]) -> str:
+    # Target a RANGE, not just the ceiling. With only "max N characters" stated, a
+    # model reliably lands far under it — three tight paragraphs that read like a
+    # placeholder rather than a channel post. The cap is a hard limit, not a goal,
+    # so the goal has to be said out loud, together with the shape a post of that
+    # length should actually have.
+    target_low = 900 if char_limit > 1024 else 600
+    target_high = 1500 if char_limit > 1024 else 950
     constraints = (
         "You are writing a Telegram channel post. Hard constraints:\n"
         f"- Output ONLY the post body — no explanation, no markdown fences, no quotes around it.\n"
@@ -38,12 +45,25 @@ def _build_prompt(brief: str, char_limit: int, samples: list[str]) -> str:
         "Telegram channel posts don't render them.\n"
         "- Plain unformatted text is also fine if no emphasis is needed."
     )
+    constraints += (
+        f"\n\nLength and shape — aim for {target_low}\u2013{target_high} characters. That is the "
+        "TARGET, not the limit: a two-or-three-sentence post reads like a stub in a real "
+        "channel feed. Give it room to breathe:\n"
+        "- open with a hook that earns the scroll-stop — a claim or tension, not a label;\n"
+        "- one paragraph of context so the topic stands on its own;\n"
+        "- one paragraph on why it matters / what's actually interesting about it;\n"
+        "- if there's a link, lead into it with a line on what the reader gets, then the URL;\n"
+        "- close with a short forward-looking line if it fits naturally.\n"
+        "Write in flowing paragraphs separated by blank lines. Never pad to hit the count — "
+        "if the topic is genuinely thin, stay shorter rather than repeating yourself."
+    )
     if samples:
         joined = "\n\n---\n\n".join(samples)
         constraints += (
-            "\n\nMatch the tone, voice, length, and typical emoji/formatting habits of these "
+            "\n\nMatch the tone, voice, and typical emoji/formatting habits of these "
             f"recent posts from the SAME channel (for style reference only — don't repeat their "
-            f"content):\n\n{joined}"
+            f"content, and don't copy their length if they're shorter than the target above):"
+            f"\n\n{joined}"
         )
     return f"{constraints}\n\nWrite a new post about: {brief}"
 

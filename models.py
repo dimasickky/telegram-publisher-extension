@@ -42,10 +42,16 @@ class PostToChannelParams(BaseModel):
     confirm: bool = Field(
         default=False,
         description=(
-            "Must be explicitly set true to actually publish. First call (confirm=false, the "
-            "default) only previews what will be posted and where — shows the rendered text/photo "
-            "and the target channel — and does not contact Telegram at all. Call again with "
-            "confirm=true, same arguments, once the preview looks right."
+            "Set true ONLY to publish a draft the user has already seen and approved. NEVER pass "
+            "true on the first call for a given post, even if the user said 'post it' or 'go "
+            "ahead' — that instruction authorises the DRAFT, not the publication. Publishing to a "
+            "channel is public and irreversible (deleting a post doesn't unsend the notification "
+            "subscribers already got), so the author must see the exact text first. Correct "
+            "sequence, always: call with confirm=false (the default) to produce the draft — it is "
+            "shown in chat AND delivered as a DM from the publishing bot itself — then wait for the "
+            "user's explicit go-ahead on THAT draft, then call again with confirm=true and the same "
+            "arguments. Posting several items? Draft every one of them first; never draft one and "
+            "publish the rest directly."
         ),
     )
 

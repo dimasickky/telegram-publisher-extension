@@ -70,3 +70,49 @@ async def _seeded_ctx(can_post=True):
     ctx = make_ctx()
     await seed_channel(ctx, can_post=can_post)
     return ctx
+
+
+@pytest.mark.asyncio
+async def test_draft_dm_is_sent_without_html_parse_mode():
+    """The DM wraps the post in our own framing and echoes the author's markup
+    verbatim. Asking Telegram to parse that as HTML makes the whole send fail on
+    any tag its limited subset rejects — and since the DM helper swallows every
+    exception by design, the draft would then vanish with no trace at all."""
+    ctx = await _seeded_ctx()
+    # The DM helper returns early unless the caller's Telegram identity is bound,
+    # so binding it is what makes this test exercise the send at all.
+    await ctx.store.create("tg_user_link", {
+        "telegram_user_id": 428365104, "linked_at": "2026-07-24T00:00:00Z",
+    })
+    sent = []
+    orig = ctx.http.post
+
+    async def spy(url, **kwargs):
+        sent.append((url, kwargs.get("json") or {}))
+        return await orig(url, **kwargs)
+
+    ctx.http.post = spy
+    ctx.http.mock_post("/sendMessage", {"ok": True, "result": {"message_id": 1}})
+
+    result = await handlers_publish.post_to_channel(
+        ctx, PostToChannelParams(
+            channel_id="-100123",
+            # markup Telegram's subset does not support
+            text="<h2>Big</h2><ul><li>one</li></ul>"))
+
+    assert result.status == "success"
+    assert result.data.needs_confirmation is True
+    dms = [b for u, b in sent if "/sendMessage" in u]
+    assert dms, "draft DM should have been sent"
+    dm = dms[0]
+    assert "parse_mode" not in dm, "draft DM must not request HTML parsing"
+    assert "Big" in dm["text"], "author's own markup is echoed verbatim"
+    assert "Draft" in dm["text"]
+
+
+@pytest.mark.asyncio
+async def test_confirm_false_is_the_default():
+    """Guards the two-step flow: a caller that forgets `confirm` must preview,
+    never publish."""
+    params = PostToChannelParams(channel_id="-100123", text="hi")
+    assert params.confirm is False

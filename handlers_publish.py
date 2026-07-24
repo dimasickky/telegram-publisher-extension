@@ -76,14 +76,24 @@ async def _dm_draft_to_user(ctx, record: dict, params: PostToChannelParams) -> N
             "Not sent yet. Confirm back in chat with Webbee to actually publish it."
         )
         text = "\n".join(lines)
+        # NO parse_mode here, deliberately. This DM is a plain-text PREVIEW of the
+        # post, wrapped in our own framing ("📝 Draft — will post to …"). Asking
+        # Telegram to parse it as HTML makes the whole send fail whenever the draft
+        # contains markup Telegram's limited subset rejects — an unclosed tag, or a
+        # heading/list the model produced — and since this helper swallows every
+        # exception by design, the draft would then vanish with no trace anywhere:
+        # the post publishes fine on confirm, but the preview DM silently never
+        # arrives. Sending the raw text shows the author exactly what they wrote,
+        # tags included, which is what a draft should show anyway.
         if params.photo_url:
             await tg.tg_call(ctx, "sendPhoto", {
                 "chat_id": link["telegram_user_id"], "photo": params.photo_url,
-                "caption": text[:1024], "parse_mode": "HTML",
+                "caption": text[:1024],
             })
         else:
             await tg.tg_call(ctx, "sendMessage", {
-                "chat_id": link["telegram_user_id"], "text": text[:4096], "parse_mode": "HTML",
+                "chat_id": link["telegram_user_id"], "text": text[:4096],
+                "disable_web_page_preview": True,
             })
     except Exception as e:
         log.warning("post_to_channel: could not DM draft to linked user: %s", e)
@@ -95,8 +105,10 @@ async def _dm_draft_to_user(ctx, record: dict, params: PostToChannelParams) -> N
     description=(
         "Publish a post to one of your linked Telegram channels. Optionally attach a photo "
         "by URL. Requires the bot to have 'Post messages' permission on that channel. "
-        "First call (confirm=false, the default) only shows a draft preview of the post and "
-        "where it will go — nothing is sent to Telegram until you call it again with confirm=true."
+        "ALWAYS a two-step flow: call it first WITHOUT confirm to produce a draft (shown in "
+        "chat and DM'd to the author by the publishing bot itself), and only call it again "
+        "with confirm=true after the author has approved that specific draft. Never publish "
+        "on the first call — 'post it' authorises the draft, not the publication."
     ),
     effects=["telegram.post"],
     event="telegram-publisher-extension.post_published",

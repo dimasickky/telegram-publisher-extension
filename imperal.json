@@ -2,7 +2,7 @@
   "manifest_schema_version": 3,
   "sdk_version": "5.9.12",
   "app_id": "telegram-publisher-extension",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "name": "Telegram Publisher",
   "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
   "icon": "icon.svg",
@@ -417,7 +417,7 @@
     },
     {
       "name": "post_to_channel",
-      "description": "Publish a post to one of your linked Telegram channels. Optionally attach a photo by URL. Requires the bot to have 'Post messages' permission on that channel. First call (confirm=false, the default) only shows a draft preview of the post and where it will go — nothing is sent to Telegram until you call it again with confirm=true.",
+      "description": "Publish a post to one of your linked Telegram channels. Optionally attach a photo by URL. Requires the bot to have 'Post messages' permission on that channel. ALWAYS a two-step flow: call it first WITHOUT confirm to produce a draft (shown in chat and DM'd to the author by the publishing bot itself), and only call it again with confirm=true after the author has approved that specific draft. Never publish on the first call — 'post it' authorises the draft, not the publication.",
       "action_type": "write",
       "chain_callable": true,
       "effects": [
@@ -457,7 +457,7 @@
           },
           "confirm": {
             "default": false,
-            "description": "Must be explicitly set true to actually publish. First call (confirm=false, the default) only previews what will be posted and where — shows the rendered text/photo and the target channel — and does not contact Telegram at all. Call again with confirm=true, same arguments, once the preview looks right.",
+            "description": "Set true ONLY to publish a draft the user has already seen and approved. NEVER pass true on the first call for a given post, even if the user said 'post it' or 'go ahead' — that instruction authorises the DRAFT, not the publication. Publishing to a channel is public and irreversible (deleting a post doesn't unsend the notification subscribers already got), so the author must see the exact text first. Correct sequence, always: call with confirm=false (the default) to produce the draft — it is shown in chat AND delivered as a DM from the publishing bot itself — then wait for the user's explicit go-ahead on THAT draft, then call again with confirm=true and the same arguments. Posting several items? Draft every one of them first; never draft one and publish the rest directly.",
             "title": "Confirm",
             "type": "boolean"
           }

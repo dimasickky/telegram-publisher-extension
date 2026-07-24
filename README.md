@@ -78,6 +78,7 @@ Ask Webbee to write and post to any linked channel — e.g. "write a post about 
 ## Architecture
 
 - One shared bot for every Imperal user (same shape as this workspace's GitHub Connector using one shared GitHub App) — not a per-user OAuth/BYO credential.
+- **Because the bot is shared, ownership is decided per user, never per bot.** Each channel record is written into the requesting user's own store partition, keyed by `chat_id` within that partition — so two people who both admin the same channel each get their own independent record, and neither can see, overwrite or disconnect the other's. Disconnecting is likewise scoped to one user: it removes your link, it does not remove the bot from the channel or affect anyone else's link to it. Attribution comes from Telegram itself: the webhook credits a channel to `my_chat_member.from` (whoever performed the promotion), and `link_channel` requires the caller to appear in that chat's `getChatAdministrators`. So "the bot is admin here" is never on its own enough to claim a channel.
 - Own storage only (`ctx.store`) — no separate backend process. Structurally closest to this workspace's WordPress Site Connector.
 - One webhook endpoint receives every Telegram update kind (`message`, `my_chat_member`, `channel_post`) — Telegram doesn't support per-event webhook URLs the way GitHub does.
 

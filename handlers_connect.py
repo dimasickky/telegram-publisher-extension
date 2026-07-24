@@ -60,6 +60,7 @@ from error_codes import (
     TG_BOT_NOT_ADMIN,
     TG_BOT_UNREACHABLE,
     TG_CHAT_NOT_REACHABLE,
+    TG_NOT_CHANNEL_ADMIN,
     TG_NOT_LINKED,
 )
 import storage
@@ -281,6 +282,30 @@ async def link_channel(ctx, params: LinkChannelParams) -> ActionResult:
             f"Couldn't read the admin list of \"{chat_title}\" — the bot is probably not an "
             "administrator there yet. Add it as admin with 'Post messages' permission, then retry.",
             code=TG_BOT_NOT_ADMIN,
+        )
+
+    # AUTHORISATION — the caller must be an admin of this chat themselves.
+    #
+    # The bot identity is shared by every Imperal user (app-scope secret), so "the
+    # bot is an admin here" says nothing about whether THIS caller has any claim to
+    # the channel. Without this check, knowing a public @username would be enough
+    # for any Imperal user to link someone else's channel and publish into it — the
+    # bot's own admin rights would happily carry the request out. The webhook path
+    # never had this hole: it attributes the channel to `my_chat_member.from`, i.e.
+    # the person who actually performed the promotion in Telegram.
+    #
+    # getChatAdministrators is the authority for this: whoever we are, Telegram
+    # decides who administers that chat. Creators are included in the same list.
+    caller_tg_id = link.get("telegram_user_id")
+    caller_is_admin = any(
+        (a.get("user") or {}).get("id") == caller_tg_id for a in admins
+    )
+    if not caller_is_admin:
+        return ActionResult.error(
+            f"Your Telegram account isn't an administrator of \"{chat_title}\", so it can't be "
+            "linked to your Imperal account. Ask an admin of that channel to link it from their "
+            "own Imperal account, or have yourself made an admin there first.",
+            code=TG_NOT_CHANNEL_ADMIN,
         )
 
     bot_member = next((a for a in admins if (a.get("user") or {}).get("id") == bot.get("id")), None)
