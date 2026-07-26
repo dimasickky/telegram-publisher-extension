@@ -20,3 +20,5 @@ TG_BOT_NOT_ADMIN = "TG_BOT_NOT_ADMIN"               # bot is in the chat but not
 TG_PHOTO_UPLOAD_FAILED = "TG_PHOTO_UPLOAD_FAILED"    # Bot API rejected the uploaded image (bad format, too large, ok:false)
 TG_NO_STAGED_PHOTO = "TG_NO_STAGED_PHOTO"            # caller asked to use/clear the staged photo but the slot is empty
 TG_PHOTO_TOO_LARGE = "TG_PHOTO_TOO_LARGE"            # image exceeds Telegram's 10 MB photo-upload cap
+TG_NO_PUBLIC_PREVIEW = "TG_NO_PUBLIC_PREVIEW"        # channel has no @username, so no t.me/s/ page to scan
+TG_ANALYSIS_EMPTY = "TG_ANALYSIS_EMPTY"              # scan completed but found no parsable posts to analyse

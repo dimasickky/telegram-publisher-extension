@@ -34,6 +34,7 @@ USER_LINK_COLLECTION = "tg_user_link"            # per-user own partition
 CHANNELS_COLLECTION = "tg_channels"              # per-user own partition
 PENDING_CHANNELS_COLLECTION = "tg_pending_channels"  # shared "__webhook__" partition
 STAGED_PHOTO_COLLECTION = "tg_staged_photo"      # per-user own partition (single-slot)
+POST_DIGEST_COLLECTION = "tg_post_digest"        # per-user own partition (one doc per channel)
 
 
 def _store_for(ctx, user_id: str):
@@ -338,5 +339,58 @@ async def clear_staged_photo(ctx) -> bool:
     doc = await _find_staged_photo_doc(ctx)
     if doc:
         await ctx.store.delete(STAGED_PHOTO_COLLECTION, doc.id)
+        return True
+    return False
+
+
+# ── Post digest (one cached analysis per channel) ── #
+#
+# Why a cache at all: the skeleton section is ambient context — the kernel
+# refreshes it on a timer for every user, whether or not anyone is talking
+# about Telegram. Scraping t.me from inside that path would put a network
+# fetch (several, once paginated) on a hot loop, and a slow or failing fetch
+# would degrade the ambient snapshot rather than one explicit call.
+#
+# So the split is: the batch analysis walks the history and WRITES here; the
+# skeleton only READS this collection, which is cheap and cannot fail on the
+# network. The digest is deliberately small — a handful of recent post
+# previews plus counters — because a skeleton snapshot is a hint for the
+# intent classifier, not a data store to page through.
+
+
+async def _find_digest_doc(ctx, chat_id):
+    page = await ctx.store.query(POST_DIGEST_COLLECTION, limit=100)
+    for doc in page.data:
+        if str(doc.data.get("chat_id")) == str(chat_id):
+            return doc
+    return None
+
+
+async def get_post_digest(ctx, chat_id) -> dict | None:
+    """Return this channel's cached digest, or None if never analysed."""
+    doc = await _find_digest_doc(ctx, chat_id)
+    return doc.data if doc else None
+
+
+async def list_post_digests(ctx) -> list[dict]:
+    """Every cached digest for this user — what the skeleton reads."""
+    page = await ctx.store.query(POST_DIGEST_COLLECTION, limit=100)
+    return [doc.data for doc in page.data]
+
+
+async def save_post_digest(ctx, record: dict) -> None:
+    """Upsert the digest for record['chat_id'] (one per channel, replaces prior)."""
+    doc = await _find_digest_doc(ctx, record.get("chat_id"))
+    if doc:
+        await ctx.store.update(POST_DIGEST_COLLECTION, doc.id, record)
+    else:
+        await ctx.store.create(POST_DIGEST_COLLECTION, record)
+
+
+async def delete_post_digest(ctx, chat_id) -> bool:
+    """Drop a channel's cached digest — used when the channel is unlinked."""
+    doc = await _find_digest_doc(ctx, chat_id)
+    if doc:
+        await ctx.store.delete(POST_DIGEST_COLLECTION, doc.id)
         return True
     return False

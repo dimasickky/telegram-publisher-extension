@@ -2,7 +2,7 @@
   "manifest_schema_version": 3,
   "sdk_version": "5.9.12",
   "app_id": "telegram-publisher-extension",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "name": "Telegram Publisher",
   "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
   "icon": "icon.svg",
@@ -15,7 +15,7 @@
   "tools": [
     {
       "name": "skeleton_refresh_channels_overview",
-      "description": "Linked Telegram channels — id, title, can_post per channel — plus whether a photo is already attached and waiting for the next post.",
+      "description": "Linked Telegram channels — id, title, can_post per channel — plus each channel's cached post-style digest (typical length, recurring words, last 10 post previews) and whether a photo is already attached and waiting for the next post.",
       "scopes": [],
       "parameters": {}
     },
@@ -1314,6 +1314,209 @@
         "x-sdl": "entity"
       },
       "event": "telegram-publisher-extension.photo_cleared",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-publisher"
+    },
+    {
+      "name": "analyze_channel_posts",
+      "description": "Analyse a linked PUBLIC channel's post history in batches — walks back through the channel's posts page by page (not just the latest 20), then caches a digest: how many posts, typical/median post length, longest and shortest, recurring words, and the most recent post previews. Use when the user asks to analyse a channel, study its style, or asks how long its posts usually are. A deep scan runs in the background and reports back on its own. The cached digest is what makes the channel's style available as ambient context afterwards.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "channel_id": {
+            "description": "Channel id from a previous list_telegram_channels call — never invent it",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "max_posts": {
+            "default": 200,
+            "description": "How far back to walk, in posts. The scan pages through the channel's public preview 20 at a time and stops early if the channel is shorter than this.",
+            "maximum": 2000,
+            "minimum": 1,
+            "title": "Max Posts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channel_id"
+        ],
+        "title": "AnalyzePostsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "The cached result of a full-history scan of one channel.\n\nDeliberately a digest, not an archive: counters plus a few recent previews.\nIt exists to be read cheaply (by the skeleton, and by drafting) rather than\nto be paged through.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "channel_id": {
+            "default": "",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "channel_title": {
+            "default": "",
+            "title": "Channel Title",
+            "type": "string"
+          },
+          "posts_scanned": {
+            "default": 0,
+            "title": "Posts Scanned",
+            "type": "integer"
+          },
+          "pages_fetched": {
+            "default": 0,
+            "title": "Pages Fetched",
+            "type": "integer"
+          },
+          "with_text": {
+            "default": 0,
+            "title": "With Text",
+            "type": "integer"
+          },
+          "avg_length": {
+            "default": 0,
+            "title": "Avg Length",
+            "type": "integer"
+          },
+          "median_length": {
+            "default": 0,
+            "title": "Median Length",
+            "type": "integer"
+          },
+          "longest": {
+            "default": 0,
+            "title": "Longest",
+            "type": "integer"
+          },
+          "shortest": {
+            "default": 0,
+            "title": "Shortest",
+            "type": "integer"
+          },
+          "newest_message_id": {
+            "default": 0,
+            "title": "Newest Message Id",
+            "type": "integer"
+          },
+          "oldest_message_id": {
+            "default": 0,
+            "title": "Oldest Message Id",
+            "type": "integer"
+          },
+          "top_words": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Top Words",
+            "type": "array"
+          },
+          "recent_previews": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Recent Previews",
+            "type": "array"
+          },
+          "reached_start": {
+            "default": false,
+            "title": "Reached Start",
+            "type": "boolean"
+          },
+          "analysed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Analysed At"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "ChannelDigest",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "telegram-publisher-extension.posts_analyzed",
       "background": false,
       "long_running": false,
       "scopes": [],

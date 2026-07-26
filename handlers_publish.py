@@ -281,6 +281,14 @@ async def disconnect_telegram_channel(ctx, params: ChannelIdParams) -> ActionRes
     deleted = await storage.delete_channel_record(ctx, params.channel_id)
     if not deleted:
         return ActionResult.error("That channel isn't linked — nothing to disconnect.", code=TG_CHANNEL_NOT_FOUND)
+
+    # Drop the cached post digest too, or the skeleton would keep advertising
+    # the style and recent posts of a channel that is no longer linked.
+    # Bookkeeping only: a failure here must not fail the disconnect itself.
+    try:
+        await storage.delete_post_digest(ctx, params.channel_id)
+    except Exception as e:
+        log.warning("disconnect_telegram_channel: unlinked but could not drop digest: %s", e)
     return ActionResult.success(
         summary="Channel unlinked from Imperal.",
         data=DisconnectResult(id=params.channel_id, title="Disconnected", kind="telegram_channel",

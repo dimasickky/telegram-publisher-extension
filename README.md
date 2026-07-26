@@ -16,7 +16,8 @@
 | ✍️ **Publish** | Post text (with a safe HTML subset — bold/italic/links/code/spoiler) or a photo with caption to any linked channel — with a **draft preview before it goes live** (see below) |
 | 🖼️ **Attach a photo** | Upload an image straight from the sidebar and the next post goes out with it — no public URL needed, nothing token-bearing stored (see below) |
 | 🪄 **AI draft** | Write a post from a brief, automatically matching the tone/style of the channel's own recent public posts, and pre-checked against Telegram's own length/formatting limits |
-| 📚 **Read** | Pull recent posts from a linked *public* channel via its `t.me/s/` preview page |
+| 📚 **Read** | Pull recent posts from a linked *public* channel via its `t.me/s/` preview page — paginated, so asking for 200 posts means 200, not the first page |
+| 📊 **Analyse** | Batch-scan a channel's whole history (`analyze_channel_posts`) — length stats, recurring vocabulary, cached as a digest the assistant can use for tone-matching |
 | 🧭 **Multi-channel** | Link as many channels/groups as you administer — one Telegram identity, N linked destinations |
 | 🩺 **Status** | Check connection state and per-channel posting permission at a glance |
 
@@ -76,6 +77,26 @@ consumes it.
 > **A file attached to a chat message can't be used** — and that's not a gap in
 > this extension. Nothing in the SDK's `Context` carries message attachments, so
 > no extension can read one. The upload widget is the way in.
+
+## Batch analysis and ambient context
+
+`analyze_channel_posts` walks a channel's history page by page (20 posts per
+fetch, via `t.me/s/?before=<id>`) up to `max_posts`, then caches a digest:
+post counts, length statistics, recurring vocabulary, and a few recent
+previews. A shallow scan answers in the turn; a deep one runs as a background
+task (1800s budget) and reports back when it finishes, so the conversation
+isn't blocked.
+
+The digest is what makes the channel's own voice available *ambiently*: the
+skeleton section reports per-channel post stats and recent previews, so
+"write a post like my channel does" has a style signal before any tool is
+picked.
+
+> **The skeleton reads that cache and never scrapes.** Ambient context is
+> refreshed on a timer for every user, whether or not anyone is talking about
+> Telegram — putting a network fetch there would be a slow-loop hazard, and a
+> failing fetch would degrade ambient context rather than one explicit call.
+> Batch work writes the cache; ambient context reads it.
 
 ## What it deliberately does NOT do
 

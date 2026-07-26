@@ -130,6 +130,41 @@ class DisconnectResult(sdl.Entity):
     disconnected: bool = False
 
 
+class AnalyzePostsParams(BaseModel):
+    channel_id: str = Field(description="Channel id from a previous list_telegram_channels call — never invent it")
+    max_posts: int = Field(
+        default=200, ge=1, le=2000,
+        description=(
+            "How far back to walk, in posts. The scan pages through the channel's public "
+            "preview 20 at a time and stops early if the channel is shorter than this."
+        ),
+    )
+
+
+class ChannelDigest(sdl.Entity):
+    """The cached result of a full-history scan of one channel.
+
+    Deliberately a digest, not an archive: counters plus a few recent previews.
+    It exists to be read cheaply (by the skeleton, and by drafting) rather than
+    to be paged through.
+    """
+    channel_id: str = ""
+    channel_title: str = ""
+    posts_scanned: int = 0
+    pages_fetched: int = 0
+    with_text: int = 0
+    avg_length: int = 0
+    median_length: int = 0
+    longest: int = 0
+    shortest: int = 0
+    newest_message_id: int = 0
+    oldest_message_id: int = 0
+    top_words: list[str] = []
+    recent_previews: list[str] = []
+    reached_start: bool = False
+    analysed_at: str | None = None
+
+
 class StagedPhotoResult(sdl.Entity):
     """The photo currently parked in the staging slot, ready for the next post.
 

@@ -2,6 +2,49 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## [0.7.0] - 2026-07-26
+
+### Fixed
+
+- **Every read of a channel silently stopped after 20 posts.** `t.me/s/` serves
+  one page at a time, and the scraper fetched exactly one page and sliced it —
+  so `limit` was a lie above 20, and tone-matching a draft sampled "the most
+  recent 20" no matter what was asked for. The page is paginated (`?before=<id>`,
+  the oldest id on the page being the cursor), which the code never used.
+  Reading now walks backwards page by page until it has what was asked for or
+  the channel runs out.
+
+  Parsing had to become id-aware for that, since the cursor is a message id.
+  Ids are treated as navigation and text as payload: if Telegram ever renames
+  the `data-post` attribute, pages whose text still parses keep returning text
+  instead of reporting an empty channel.
+
+### Added
+
+- **`analyze_channel_posts` — a real batch pass over a channel's history.**
+  Pages back through the whole archive (up to `max_posts`, default 200),
+  computes length statistics and recurring vocabulary, and caches the result.
+
+  Depth picks the execution mode. A shallow scan answers inside the turn. A
+  deep one is spawned via `ctx.background_task(long_running=True)` — 1800s
+  instead of the 180s a normal call gets — because a timeout mid-walk would
+  throw away every fetch already made. Where no kernel spawn hook exists (dev
+  mode, tests) it degrades to running inline rather than failing.
+
+- **The skeleton now carries the channel's own posts.** `channels_overview`
+  reports, per channel, how many posts were analysed, the typical post length,
+  recurring words and the last few post previews — so "write like my channel"
+  has a style signal in ambient context, before any tool is chosen.
+
+  It reads the cached digest and never scrapes. That split is the point: the
+  skeleton is refreshed on a timer for every user whether or not anyone is
+  discussing Telegram, so a network fetch in that path would be a slow-loop
+  hazard, and a failing fetch would degrade ambient context rather than one
+  explicit call. Batch work writes the cache; ambient context reads it.
+
+- Disconnecting a channel now drops its cached digest too — otherwise the
+  skeleton would keep advertising the style of a channel no longer linked.
+
 ## [0.6.1] - 2026-07-26
 
 ### Fixed
