@@ -67,13 +67,19 @@ def _photo_section(staged: dict | None):
             ui.Icon("Image"),
             ui.Text("Photo for the next post"),
         ]),
+        ui.Text(
+            "Drop an image here to attach it to your next post.",
+            variant="caption",
+        ),
+        # Only the 8 parameters below are accepted — the presentational hints in
+        # the SDK's own FileUpload signature (title/hint/variant/show_previews)
+        # are rejected by the deploy validator, so the caption above carries the
+        # instruction instead. Same minimal shape as tasks/panels_task.py.
         ui.FileUpload(
             param_name="files",
             accept="image/*",
             max_size_mb=10,          # Telegram's own cap for sendPhoto
             multiple=False,          # single-slot staging, see storage.py
-            show_previews=True,
-            hint="Drop an image here to attach it to your next post",
             on_upload=ui.Call("upload_post_photo"),
         ),
     ])
