@@ -121,11 +121,64 @@ async def test_skeleton_serves_digest_without_any_http():
 
     snap = (await skeleton.channels_overview(ctx))["response"]
 
-    assert snap["channels"][0]["posts_analysed"] == 40
-    assert snap["channels"][0]["whole_history_scanned"] is True
-    assert len(snap["channels"][0]["recent_posts"]) == skeleton._SKELETON_RECENT
+    assert snap["channels"][0]["posts"] == 40
+    assert snap["channels"][0]["full_scan"] is True
+    # Previews live at SECTION level, not inside the channel entry: the
+    # kernel's renderer drops nested lists from list items entirely.
+    assert "recent_posts" not in snap["channels"][0]
+    assert len(snap["recent_posts"]) == skeleton._SKELETON_RECENT
     # No GET was issued while building ambient context.
     assert not any(c[0] == "GET" for c in getattr(ctx.http, "calls", []))
+
+
+@pytest.mark.asyncio
+async def test_skeleton_shape_survives_classifier_budgets():
+    """Guard the three renderer rules this snapshot is shaped around.
+
+    The kernel projects a skeleton section into the classifier envelope through
+    hard caps (imperal_kernel/hub/classifier/skeleton_summary.py): nested
+    dict/list values inside a list item are SKIPPED, only the first 6 scalar
+    fields of an item render, and each item is cut at ~110 chars. A shape that
+    ignores those caps is not a loud failure — the data just silently never
+    reaches the brain, which is exactly the bug this replaced. So the contract
+    is asserted here rather than trusted.
+    """
+    ctx = make_ctx()
+    await seed_channel(ctx, chat_username="testchannel")
+    await storage.save_post_digest(ctx, {
+        "chat_id": "-100123", "posts_scanned": 7, "median_length": 749,
+        "top_words": ["alpha", "beta", "gamma", "delta", "epsilon"],
+        "recent_previews": [
+            "Headline one\n\nBody paragraph that continues well past the preview cap "
+            "to prove the trailing text is dropped rather than wrapped.",
+            "Second post\nwith a newline",
+        ],
+        "reached_start": True,
+    })
+
+    snap = (await skeleton.channels_overview(ctx))["response"]
+    entry = snap["channels"][0]
+
+    # 1. Every value on a channel entry is a scalar, or it vanishes in render.
+    for key, value in entry.items():
+        assert not isinstance(value, (dict, list)), f"{key} would be dropped"
+
+    # 2. An entry stays within the render window. The cap counts only the
+    #    fields rendered as k=v: the kernel consumes one label key (`title`)
+    #    and one id key (`id`) into the item header, so those two are free and
+    #    the 6-field budget applies to what is left. Verified directly against
+    #    the kernel renderer: a 7th payload field is silently dropped.
+    payload = [k for k in entry if k not in ("id", "title")]
+    assert len(payload) <= 6, f"fields past the 6th never render: {payload}"
+
+    # 3. No preview carries a newline — the envelope is one line per section,
+    #    so an embedded newline would corrupt the block.
+    for post in snap["recent_posts"]:
+        assert "\n" not in post["title"]
+        assert len(post["title"]) <= skeleton._PREVIEW_CHARS
+        # `title` is one of the kernel's label keys — that is what makes the
+        # item render its content instead of collapsing to an opaque count.
+        assert post["title"]
 
 
 @pytest.mark.asyncio
@@ -133,4 +186,5 @@ async def test_skeleton_omits_post_fields_before_any_analysis():
     ctx = make_ctx()
     await seed_channel(ctx, chat_username="testchannel")
     snap = (await skeleton.channels_overview(ctx))["response"]
-    assert "posts_analysed" not in snap["channels"][0]
+    assert "posts" not in snap["channels"][0]
+    assert snap["recent_posts"] == []

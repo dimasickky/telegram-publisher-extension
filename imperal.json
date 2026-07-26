@@ -2,7 +2,7 @@
   "manifest_schema_version": 3,
   "sdk_version": "5.9.12",
   "app_id": "telegram-publisher-extension",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "name": "Telegram Publisher",
   "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
   "icon": "icon.svg",
@@ -15,7 +15,7 @@
   "tools": [
     {
       "name": "skeleton_refresh_channels_overview",
-      "description": "Linked Telegram channels — id, title, can_post per channel — plus each channel's cached post-style digest (typical length, recurring words, last 10 post previews) and whether a photo is already attached and waiting for the next post.",
+      "description": "Linked Telegram channels — id, title, can_post, plus each channel's cached post-style digest (posts scanned, avg_chars, recurring words, full_scan) — a sample of recent post previews, and whether a photo is already attached for the next post.",
       "scopes": [],
       "parameters": {}
     },

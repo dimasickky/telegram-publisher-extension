@@ -2,6 +2,43 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## [0.7.1] - 2026-07-27
+
+### Fixed
+
+- **The channel style digest never actually reached the assistant.** The
+  ambient snapshot nested `recurring_words` and `recent_posts` *inside* each
+  channel entry, and the platform's classifier projection skips nested
+  dict/list values inside a list item — so those two fields were not truncated,
+  they were dropped entirely before the model saw them. Everything the digest
+  exists for ("write a post in my channel's usual tone") was invisible while
+  looking perfectly fine in the panel and in tests. Previews are now a
+  top-level list and the word list a joined string, both of which render.
+- **Post previews broke the snapshot envelope.** Posts are multi-line by
+  nature, the envelope is one line per section, and the raw `\n\n` between a
+  headline and its body split values across lines. Previews are collapsed to a
+  single line before being capped.
+- **Long field names pushed real data out of the render.** Each item is cut at
+  ~110 characters and a *key name* spends that budget exactly like a value:
+  with `posts_analysed` / `typical_post_chars` / `whole_history_scanned` the
+  labels plus the numeric chat id consumed almost the whole allowance and the
+  style hint was truncated away. Renamed to `posts` / `avg_chars` /
+  `full_scan` / `words`, and ordered so the variable-length string comes last.
+
+### Changed
+
+- Skeleton `ttl` 300s → 60s, matching the platform's own mail section. Sample
+  size 10 → 6 previews: six arrive intact inside the ~700-char list budget
+  where ten were cut off mid-list. A shorter hint that survives beats a longer
+  one that does not.
+
+### Added
+
+- `test_skeleton_shape_survives_classifier_budgets` — asserts the three
+  projection rules (scalars only inside items, the 6-field window, the item
+  cap) instead of trusting them. Violating them is a silent failure, not a
+  loud one, which is how the bug above survived a green suite.
+
 ## [0.7.0] - 2026-07-26
 
 ### Fixed
