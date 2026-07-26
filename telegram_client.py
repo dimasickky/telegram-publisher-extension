@@ -39,6 +39,31 @@ async def tg_call(ctx, method: str, json_body: dict | None = None):
     return await ctx.http.post(url, json=json_body or {})
 
 
+async def tg_call_upload(ctx, method: str, field: str, filename: str,
+                         data: bytes, content_type: str,
+                         fields: dict | None = None):
+    """Same as tg_call, but uploads BYTES as multipart/form-data.
+
+    The Bot API accepts a file three ways: a public URL, a previously returned
+    file_id, or the raw bytes as multipart. Only the third works for a file
+    that exists solely inside Imperal — the user's upload has no public URL
+    for Telegram to fetch, and a URL Telegram cannot reach is rejected with a
+    generic "wrong file identifier" that gives the user nothing to act on.
+
+    ctx.http forwards **kwargs straight to httpx (imperal_sdk/http/client.py),
+    so httpx's own `files=`/`data=` multipart encoding is available here —
+    no separate HTTP client and no extra dependency needed.
+    """
+    token = await _bot_token(ctx)
+    url = f"{_API_ROOT}/bot{token}/{method}"
+    return await ctx.http.post(
+        url,
+        files={field: (filename, data, content_type)},
+        data={k: str(v) for k, v in (fields or {}).items()},
+        timeout=120,  # a photo upload is a real transfer, not a JSON round-trip
+    )
+
+
 def tg_ok(resp) -> bool:
     body = resp.body if hasattr(resp, "body") else resp
     return isinstance(body, dict) and body.get("ok") is True

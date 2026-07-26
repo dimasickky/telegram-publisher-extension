@@ -14,6 +14,7 @@
 | --- | --- |
 | 🔌 **Connect** | Link your Telegram identity with a one-tap deep link, then add the bot as admin to any channel/group you own — it's auto-discovered, no chat IDs to paste |
 | ✍️ **Publish** | Post text (with a safe HTML subset — bold/italic/links/code/spoiler) or a photo with caption to any linked channel — with a **draft preview before it goes live** (see below) |
+| 🖼️ **Attach a photo** | Upload an image straight from the sidebar and the next post goes out with it — no public URL needed, nothing token-bearing stored (see below) |
 | 🪄 **AI draft** | Write a post from a brief, automatically matching the tone/style of the channel's own recent public posts, and pre-checked against Telegram's own length/formatting limits |
 | 📚 **Read** | Pull recent posts from a linked *public* channel via its `t.me/s/` preview page |
 | 🧭 **Multi-channel** | Link as many channels/groups as you administer — one Telegram identity, N linked destinations |
@@ -46,6 +47,35 @@ public-facing action ever fires on a first call.
 3. Private channels (no public `@username`) skip tone sampling automatically
    and just write to the brief — there is no way to read their history (see
    "What it deliberately does NOT do" below).
+
+## Attaching a photo
+
+Two ways to illustrate a post:
+
+- **A public URL** — pass `photo_url` and Telegram fetches it.
+- **An upload** — drop an image into the sidebar's upload area. It's staged
+  for your next post; publish, and it goes out as the photo with your text as
+  its caption.
+
+The upload doesn't park bytes in Imperal. It sends them to *your own DM with
+the bot* and keeps the `file_id` Telegram returns — a durable handle that
+`sendPhoto` accepts in exactly the same field as a URL. You get a real preview
+in the client that will publish it, and Imperal stores a pointer rather than
+an image.
+
+One photo is staged at a time — "the photo I just attached" is a staging area,
+not a media library, so a new upload replaces the previous one. It's freed
+automatically once a post that used it is confirmed sent: a failed send leaves
+it in place for the retry, and a post you gave an explicit `photo_url` never
+consumes it.
+
+> **A photo post is a captioned post**, and Telegram caps captions at 1024
+> characters against 4096 for plain text. That limit is checked before sending,
+> not discovered through a rejection.
+
+> **A file attached to a chat message can't be used** — and that's not a gap in
+> this extension. Nothing in the SDK's `Context` carries message attachments, so
+> no extension can read one. The upload widget is the way in.
 
 ## What it deliberately does NOT do
 
@@ -85,6 +115,7 @@ Ask Webbee to write and post to any linked channel — e.g. "write a post about 
 ## Security
 
 - The bot token is a single app-scope secret (Developer Portal → Secrets), never a per-user credential.
+- **Uploaded photos are stored as `file_id`, never as a fetchable URL.** The Bot API's `getFile` returns a path of the form `api.telegram.org/file/bot<TOKEN>/…` — it embeds the bot token, which is shared by every user of this extension, so rendering it in a browser would leak it. A `file_id` carries no credential.
 - Webhook authenticity is verified via Telegram's `secret_token` mechanism (`X-Telegram-Bot-Api-Secret-Token`), compared with `secrets.compare_digest`.
 - No phone numbers, session strings, or 2FA credentials are ever requested or stored.
 

@@ -37,7 +37,11 @@ class PostToChannelParams(BaseModel):
         "support b/i/u/s/a/code/pre/blockquote/spoiler, NOT headings/tables/"
         "lists as HTML elements. Plain text also works unformatted."
     ))
-    photo_url: str | None = Field(default=None, description="Optional public image URL to attach as a photo post (caption = text)")
+    photo_url: str | None = Field(default=None, description=(
+        "Optional PUBLIC image URL to attach as a photo post (caption = text). Leave empty to "
+        "use the photo uploaded through the panel, if one is pending — that one is picked up "
+        "automatically. A file the user attached to a chat message is NOT available here."
+    ))
     disable_preview: bool = Field(default=False, description="Suppress link preview card for URLs in the text")
     confirm: bool = Field(
         default=False,
@@ -59,6 +63,17 @@ class PostToChannelParams(BaseModel):
 class GetRecentPostsParams(BaseModel):
     channel_id: str = Field(description="Channel id from a previous list_telegram_channels call — never invent it")
     limit: int = Field(default=20, ge=1, le=100, description="Max recent posts to return, 1-100")
+
+
+class UploadPostPhotoParams(BaseModel):
+    files: object = Field(
+        default=None,
+        description=(
+            "FileUpload payload (list[dict] with data_base64/name/content_type) — the image to "
+            "attach to the next post. Comes from the panel's upload widget; there is no way to "
+            "pass a file straight from chat, so never try to synthesise this argument."
+        ),
+    )
 
 
 class GenerateDraftParams(BaseModel):
@@ -110,3 +125,17 @@ class DraftResult(sdl.Entity):
 class DisconnectResult(sdl.Entity):
     channel_id: str = ""
     disconnected: bool = False
+
+
+class StagedPhotoResult(sdl.Entity):
+    """The photo currently parked in the staging slot, ready for the next post.
+
+    `file_id` is Telegram's own handle for the uploaded image — the bytes live
+    on Telegram's servers, Imperal only keeps the pointer.
+    """
+    file_id: str = ""
+    file_name: str = ""
+    width: int = 0
+    height: int = 0
+    staged_at: str | None = None
+    cleared: bool = False

@@ -27,7 +27,30 @@ import telegram_client as tg
 log = logging.getLogger("telegram-publisher")
 
 
-def _preview_ui(record: dict, params: PostToChannelParams):
+async def _resolve_photo(ctx, params: PostToChannelParams) -> tuple[str | None, bool]:
+    """Decide which image this post carries: (photo, came_from_staging).
+
+    `photo` is whatever sendPhoto accepts as its `photo` field — either the
+    caller's public URL or a Telegram file_id from the staging slot; both are
+    plain strings on the wire, so the caller needs no branch for them.
+
+    An explicit photo_url wins over the staged photo. The staged one is the
+    implicit "the photo I attached earlier" default, and something the user
+    named right now must never be silently overridden by it.
+
+    The flag matters because the slot may only be cleared for a post that
+    actually used it — clearing it after a post that carried a URL instead
+    would throw away a photo the user is still waiting to publish.
+    """
+    if params.photo_url:
+        return params.photo_url, False
+    staged = await storage.get_staged_photo(ctx)
+    if staged and staged.get("file_id"):
+        return staged["file_id"], True
+    return None, False
+
+
+def _preview_ui(record: dict, params: PostToChannelParams, staged: dict | None = None):
     """Render exactly what post_to_channel would send, so the draft looks the
     same in chat as the real Telegram post would: same HTML subset, same
     photo (if any), plus the confirmation reminder itself."""
@@ -40,6 +63,16 @@ def _preview_ui(record: dict, params: PostToChannelParams):
     ]
     if params.photo_url:
         children.append(ui.Image(src=params.photo_url, alt="Post photo"))
+    elif staged:
+        # A staged photo has no renderable URL — the only one Telegram offers
+        # embeds the bot token (see handlers_media). Name it instead; the
+        # author already got the image itself as a DM when they uploaded it.
+        name = staged.get("name") or "attached photo"
+        dims = f" · {staged['width']}×{staged['height']}" if staged.get("width") else ""
+        children.append(ui.Stack(direction="h", gap=2, children=[
+            ui.Icon("Image"),
+            ui.Text(f"With photo: {name}{dims}", variant="caption"),
+        ]))
     children.append(ui.Html(content=params.text or "<i>(empty)</i>", theme="dark"))
     children.append(ui.Alert(
         title="Not sent yet",
@@ -50,7 +83,8 @@ def _preview_ui(record: dict, params: PostToChannelParams):
     return ui.Stack(gap=3, children=children)
 
 
-async def _dm_draft_to_user(ctx, record: dict, params: PostToChannelParams) -> None:
+async def _dm_draft_to_user(ctx, record: dict, params: PostToChannelParams,
+                            photo: str | None = None) -> None:
     """Best-effort: have the SAME bot that will actually publish the post also
     DM the linked Telegram user a plain-text draft of it and where it's
     headed — no inline buttons, just a message, since confirmation stays in
@@ -90,6 +124,13 @@ async def _dm_draft_to_user(ctx, record: dict, params: PostToChannelParams) -> N
                 "chat_id": link["telegram_user_id"], "photo": params.photo_url,
                 "caption": text[:1024],
             })
+        elif photo:
+            # Staged photo: `photo` is a file_id, which sendPhoto accepts in the
+            # exact same field as a URL.
+            await tg.tg_call(ctx, "sendPhoto", {
+                "chat_id": link["telegram_user_id"], "photo": photo,
+                "caption": text[:1024],
+            })
         else:
             await tg.tg_call(ctx, "sendMessage", {
                 "chat_id": link["telegram_user_id"], "text": text[:4096],
@@ -104,7 +145,9 @@ async def _dm_draft_to_user(ctx, record: dict, params: PostToChannelParams) -> N
     action_type="write",
     description=(
         "Publish a post to one of your linked Telegram channels. Optionally attach a photo "
-        "by URL. Requires the bot to have 'Post messages' permission on that channel. "
+        "by URL, or leave photo_url empty to use the photo uploaded in the panel (if any) — "
+        "a pending photo is picked up automatically and cleared once the post goes out. "
+        "Requires the bot to have 'Post messages' permission on that channel. "
         "ALWAYS a two-step flow: call it first WITHOUT confirm to produce a draft (shown in "
         "chat and DM'd to the author by the publishing bot itself), and only call it again "
         "with confirm=true after the author has approved that specific draft. Never publish "
@@ -136,9 +179,18 @@ async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
             code=TG_BOT_CANNOT_POST,
         )
 
-    if len(params.text) > 4096:
+    photo, from_staging = await _resolve_photo(ctx, params)
+    staged_meta = await storage.get_staged_photo(ctx) if from_staging else None
+
+    # A photo post is captioned, and Telegram caps captions at 1024 characters
+    # against 4096 for a plain message — so the limit depends on whether this
+    # post carries an image, including one picked up from the staging slot.
+    max_len = 1024 if photo else 4096
+    if len(params.text) > max_len:
+        extra = " (a post with a photo is a captioned post, and captions are capped lower)" if photo else ""
         return ActionResult.error(
-            "Post text is too long (Telegram's limit is 4096 characters) — shorten it and try again.",
+            f"Post text is too long — {len(params.text)} characters against Telegram's "
+            f"{max_len}-character limit{extra}. Shorten it and try again.",
             code="TG_MESSAGE_TOO_LONG",
         )
 
@@ -147,7 +199,7 @@ async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
             f"post_to_channel: preview only (awaiting confirm) \u2014 channel '{params.channel_id}'",
             level="info",
         )
-        await _dm_draft_to_user(ctx, record, params)
+        await _dm_draft_to_user(ctx, record, params, photo=photo)
         return ActionResult.success(
             PostResult(
                 id=params.channel_id, title="Draft", kind="telegram_post_draft",
@@ -157,13 +209,13 @@ async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
                 f"Draft ready for \"{record.get('chat_title', params.channel_id)}\" \u2014 nothing sent yet. "
                 "Call again with confirm=true to publish it."
             ),
-            ui=_preview_ui(record, params),
+            ui=_preview_ui(record, params, staged=staged_meta),
         )
 
     try:
-        if params.photo_url:
+        if photo:
             resp = await tg.tg_call(ctx, "sendPhoto", {
-                "chat_id": record["chat_id"], "photo": params.photo_url, "caption": params.text,
+                "chat_id": record["chat_id"], "photo": photo, "caption": params.text,
                 "parse_mode": "HTML",
             })
         else:
@@ -186,12 +238,24 @@ async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
     chat_username = (result.get("chat") or {}).get("username")
     link = f"https://t.me/{chat_username}/{message_id}" if chat_username and message_id else None
 
+    # The staged photo has served its purpose — free the slot so it can't ride
+    # along on the next, unrelated post. Only when the post actually used it,
+    # and only after a confirmed send: a failure above returns early, leaving
+    # the photo staged for the retry.
+    if from_staging:
+        try:
+            await storage.clear_staged_photo(ctx)
+        except Exception as e:
+            # The post IS published; a bookkeeping failure must not report it as failed.
+            log.warning("post_to_channel: published but could not clear staged photo: %s", e)
+
     return ActionResult.success(
         summary=f"Posted to \"{record.get('chat_title', params.channel_id)}\".",
         data=PostResult(
             id=str(message_id), title="Post", kind="telegram_post",
             channel_id=params.channel_id, message_id=message_id, link=link,
         ),
+        refresh_panels=["sidebar"] if from_staging else None,
     )
 
 

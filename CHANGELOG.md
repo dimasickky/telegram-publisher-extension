@@ -2,6 +2,52 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## [0.6.0] - 2026-07-26
+
+### Added
+
+- **Posting a photo no longer requires hosting it somewhere public first.**
+  `post_to_channel` could only take `photo_url`, so illustrating a post meant
+  finding a public URL for an image the user already had in front of them.
+  There is now an upload widget in the sidebar: drop an image in, and the next
+  post goes out with it. The `photo_url` route is untouched and still wins when
+  both are present — something named explicitly must never be overridden by a
+  photo staged earlier.
+
+  Mechanically, the upload does not store bytes in Imperal. It POSTs them to
+  the author's own DM with the bot (multipart, the only form the Bot API
+  accepts for a file with no public URL) and keeps the `file_id` Telegram
+  returns — a durable handle that `sendPhoto` accepts in the same field as a
+  URL. Two things fall out of that: the author sees the actual image in the
+  same client that will publish it, and nothing token-bearing is ever stored.
+  The obvious alternative — `getFile` — hands back a URL with the bot token
+  embedded in the path, and that token is an app-scope secret shared by every
+  user of this extension, so it must never reach a browser.
+
+  The staging slot holds exactly one photo per user: "the photo I just
+  attached" is a staging area, not a media library, so a second upload replaces
+  the first rather than leaving orphans nobody clears. It is freed
+  automatically once a post that used it is confirmed sent — never before, so a
+  failed send leaves the photo in place for the retry, and never after a post
+  that carried a URL instead.
+
+- `clear_staged_photo` — drop a pending photo without posting it.
+
+### Changed
+
+- The post-length check now depends on whether the post carries an image: a
+  photo post is a captioned post, and Telegram caps captions at 1024 characters
+  against 4096 for plain text. Previously a caption-length overflow was only
+  discovered by Telegram rejecting the send; it is now caught up front, with an
+  error that says *why* the limit is lower.
+
+### Note
+
+- A file attached to a **chat message** still cannot be used — not a gap in
+  this extension. Nothing in the SDK's `Context` carries message attachments,
+  so no extension can read one; the panel upload widget is the only route a
+  file has in.
+
 ## [0.5.0] - 2026-07-24
 
 ### Security

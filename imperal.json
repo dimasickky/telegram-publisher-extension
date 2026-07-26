@@ -2,7 +2,7 @@
   "manifest_schema_version": 3,
   "sdk_version": "5.9.12",
   "app_id": "telegram-publisher-extension",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "name": "Telegram Publisher",
   "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
   "icon": "icon.svg",
@@ -417,7 +417,7 @@
     },
     {
       "name": "post_to_channel",
-      "description": "Publish a post to one of your linked Telegram channels. Optionally attach a photo by URL. Requires the bot to have 'Post messages' permission on that channel. ALWAYS a two-step flow: call it first WITHOUT confirm to produce a draft (shown in chat and DM'd to the author by the publishing bot itself), and only call it again with confirm=true after the author has approved that specific draft. Never publish on the first call — 'post it' authorises the draft, not the publication.",
+      "description": "Publish a post to one of your linked Telegram channels. Optionally attach a photo by URL, or leave photo_url empty to use the photo uploaded in the panel (if any) — a pending photo is picked up automatically and cleared once the post goes out. Requires the bot to have 'Post messages' permission on that channel. ALWAYS a two-step flow: call it first WITHOUT confirm to produce a draft (shown in chat and DM'd to the author by the publishing bot itself), and only call it again with confirm=true after the author has approved that specific draft. Never publish on the first call — 'post it' authorises the draft, not the publication.",
       "action_type": "write",
       "chain_callable": true,
       "effects": [
@@ -446,7 +446,7 @@
               }
             ],
             "default": null,
-            "description": "Optional public image URL to attach as a photo post (caption = text)",
+            "description": "Optional PUBLIC image URL to attach as a photo post (caption = text). Leave empty to use the photo uploaded through the panel, if one is pending — that one is picked up automatically. A file the user attached to a chat message is NOT available here.",
             "title": "Photo Url"
           },
           "disable_preview": {
@@ -1028,6 +1028,286 @@
       "long_running": false,
       "scopes": [],
       "owner_chat_tool": "telegram-publisher"
+    },
+    {
+      "name": "upload_post_photo",
+      "description": "Attach an image to the NEXT post — upload it from the Telegram panel's photo picker. The file is sent to Telegram and kept as the pending photo until you publish a post or clear it. Only one photo can be pending at a time; uploading another replaces it. Files can ONLY arrive through the panel's upload widget — a file attached to a chat message never reaches this extension, so never invent the 'files' argument or claim a chat attachment was received.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "telegram.upload"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "files": {
+            "default": null,
+            "description": "FileUpload payload (list[dict] with data_base64/name/content_type) — the image to attach to the next post. Comes from the panel's upload widget; there is no way to pass a file straight from chat, so never try to synthesise this argument.",
+            "title": "Files"
+          }
+        },
+        "title": "UploadPostPhotoParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "The photo currently parked in the staging slot, ready for the next post.\n\n`file_id` is Telegram's own handle for the uploaded image — the bytes live\non Telegram's servers, Imperal only keeps the pointer.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "file_id": {
+            "default": "",
+            "title": "File Id",
+            "type": "string"
+          },
+          "file_name": {
+            "default": "",
+            "title": "File Name",
+            "type": "string"
+          },
+          "width": {
+            "default": 0,
+            "title": "Width",
+            "type": "integer"
+          },
+          "height": {
+            "default": 0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "staged_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Staged At"
+          },
+          "cleared": {
+            "default": false,
+            "title": "Cleared",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "StagedPhotoResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "telegram-publisher-extension.photo_staged",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-publisher"
+    },
+    {
+      "name": "clear_staged_photo",
+      "description": "Remove the pending photo so the next post goes out as text only. Does not delete anything already published.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "telegram.upload"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {},
+        "title": "_NoParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "The photo currently parked in the staging slot, ready for the next post.\n\n`file_id` is Telegram's own handle for the uploaded image — the bytes live\non Telegram's servers, Imperal only keeps the pointer.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "file_id": {
+            "default": "",
+            "title": "File Id",
+            "type": "string"
+          },
+          "file_name": {
+            "default": "",
+            "title": "File Name",
+            "type": "string"
+          },
+          "width": {
+            "default": 0,
+            "title": "Width",
+            "type": "integer"
+          },
+          "height": {
+            "default": 0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "staged_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Staged At"
+          },
+          "cleared": {
+            "default": false,
+            "title": "Cleared",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "StagedPhotoResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "telegram-publisher-extension.photo_cleared",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-publisher"
     }
   ],
   "signals": [],
@@ -1080,7 +1360,7 @@
       "title": "Telegram",
       "tree": {},
       "icon": "",
-      "refresh": "on_event:telegram-publisher-extension.connect_telegram,telegram-publisher-extension.channel_connected,telegram-publisher-extension.channel_disconnected",
+      "refresh": "on_event:telegram-publisher-extension.connect_telegram,telegram-publisher-extension.channel_connected,telegram-publisher-extension.channel_disconnected,telegram-publisher-extension.photo_staged,telegram-publisher-extension.photo_cleared,telegram-publisher-extension.post_published",
       "center_overlay": false,
       "default_width": 280,
       "min_width": 200,

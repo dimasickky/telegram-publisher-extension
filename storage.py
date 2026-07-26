@@ -20,6 +20,12 @@ explicitly built under the shared "__webhook__" pseudo-user via `_store_for`
 - `tg_channels` (the real user's OWN partition) — one document per bound
   channel: {chat_id, chat_title, chat_type, can_post, linked_at}. Same shape
   as wp-site-connector's `sites` collection (N per user).
+- `tg_staged_photo` (the real user's OWN partition) — at most ONE document:
+  the photo the user uploaded in the panel and hasn't posted yet, stored as
+  a Telegram `file_id` (not bytes — see handlers_publish.upload_post_photo
+  for why file_id is the durable form). Deliberately single-slot: "the photo
+  I just attached" is a staging area, not a library, so a second upload
+  replaces the first instead of piling up orphans nobody ever clears.
 """
 
 LINK_CODES_COLLECTION = "tg_link_codes"          # shared "__webhook__" partition
@@ -27,6 +33,7 @@ USER_INDEX_COLLECTION = "tg_user_index"          # shared "__webhook__" partitio
 USER_LINK_COLLECTION = "tg_user_link"            # per-user own partition
 CHANNELS_COLLECTION = "tg_channels"              # per-user own partition
 PENDING_CHANNELS_COLLECTION = "tg_pending_channels"  # shared "__webhook__" partition
+STAGED_PHOTO_COLLECTION = "tg_staged_photo"      # per-user own partition (single-slot)
 
 
 def _store_for(ctx, user_id: str):
@@ -297,3 +304,39 @@ async def mark_channel_disconnected_for_user(webhook_ctx, imperal_id: str, chat_
             updated["can_post"] = False
             await store.update(CHANNELS_COLLECTION, doc.id, updated)
             return
+
+
+# ── Staged photo (at most one per user — the "just attached" slot) ── #
+
+async def _find_staged_photo_doc(ctx):
+    page = await ctx.store.query(STAGED_PHOTO_COLLECTION, limit=1)
+    return page.data[0] if page.data else None
+
+
+async def get_staged_photo(ctx) -> dict | None:
+    """Return {file_id, file_unique_id, name, width, height, staged_at} or None."""
+    doc = await _find_staged_photo_doc(ctx)
+    return doc.data if doc else None
+
+
+async def save_staged_photo(ctx, record: dict) -> None:
+    """Upsert THE staged photo for this user (single-slot: replaces any previous)."""
+    doc = await _find_staged_photo_doc(ctx)
+    if doc:
+        await ctx.store.update(STAGED_PHOTO_COLLECTION, doc.id, record)
+    else:
+        await ctx.store.create(STAGED_PHOTO_COLLECTION, record)
+
+
+async def clear_staged_photo(ctx) -> bool:
+    """Drop the staged photo, if any. Returns whether there was one to drop.
+
+    Only forgets Imperal's pointer to it — the file itself lives on Telegram's
+    servers and the Bot API has no delete-file method, so there is nothing to
+    clean up on their side.
+    """
+    doc = await _find_staged_photo_doc(ctx)
+    if doc:
+        await ctx.store.delete(STAGED_PHOTO_COLLECTION, doc.id)
+        return True
+    return False

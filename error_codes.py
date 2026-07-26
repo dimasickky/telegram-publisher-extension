@@ -17,3 +17,6 @@ TG_MESSAGE_TOO_LONG = "TG_MESSAGE_TOO_LONG"          # text exceeds Telegram's p
 TG_DRAFT_GENERATION_FAILED = "TG_DRAFT_GENERATION_FAILED"  # ctx.ai.complete() failed or returned empty text
 TG_CHAT_NOT_REACHABLE = "TG_CHAT_NOT_REACHABLE"      # getChat failed: no such chat, or bot isn't a member of it
 TG_BOT_NOT_ADMIN = "TG_BOT_NOT_ADMIN"               # bot is in the chat but not an administrator
+TG_PHOTO_UPLOAD_FAILED = "TG_PHOTO_UPLOAD_FAILED"    # Bot API rejected the uploaded image (bad format, too large, ok:false)
+TG_NO_STAGED_PHOTO = "TG_NO_STAGED_PHOTO"            # caller asked to use/clear the staged photo but the slot is empty
+TG_PHOTO_TOO_LARGE = "TG_PHOTO_TOO_LARGE"            # image exceeds Telegram's 10 MB photo-upload cap

@@ -12,8 +12,8 @@ if _EXT_DIR not in sys.path:
 # Purge stale cached modules so a fresh load always registers decorators correctly
 # (the validator may run multiple extensions in the same process).
 _LOCAL = ("app", "handlers_connect", "handlers_publish", "handlers_read",
-          "handlers_generate", "models", "storage", "telegram_client", "error_codes", "skeleton",
-          "panels")
+          "handlers_generate", "handlers_media", "models", "storage", "telegram_client",
+          "error_codes", "skeleton", "panels")
 for _mod in _LOCAL:
     sys.modules.pop(_mod, None)
 
@@ -22,5 +22,6 @@ import handlers_connect  # noqa: E402,F401
 import handlers_publish  # noqa: E402,F401
 import handlers_read  # noqa: E402,F401
 import handlers_generate  # noqa: E402,F401
+import handlers_media  # noqa: E402,F401
 import skeleton  # noqa: E402,F401
 import panels  # noqa: E402,F401

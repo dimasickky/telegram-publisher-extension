@@ -25,6 +25,60 @@ def _channel_subtitle(record: dict) -> str:
     return chat_type.capitalize() if chat_type else ""
 
 
+def _photo_section(staged: dict | None):
+    """The attach-a-photo block: either the upload dropzone, or what's pending.
+
+    This widget is the ONLY route a file has into this extension — a photo
+    attached to a chat message never reaches an extension at all (nothing in
+    the SDK's Context carries message attachments), so the panel has to own
+    the upload.
+
+    Nothing here renders the image itself: the only URL Telegram exposes for a
+    stored file embeds the bot token, which is an app-scope secret shared by
+    every user of this extension — putting it in an <img src> would hand it to
+    the browser. The author's preview is the copy the bot DM's them on upload
+    (see handlers_media.upload_post_photo).
+    """
+    if staged and staged.get("file_id"):
+        name = staged.get("name") or "photo"
+        dims = ""
+        if staged.get("width") and staged.get("height"):
+            dims = f"{staged['width']}×{staged['height']}"
+        return ui.Stack(gap=2, children=[
+            ui.Stack(direction="h", gap=2, children=[
+                ui.Icon("Image"),
+                ui.Text("Photo attached"),
+                ui.Badge(label="pending", color="blue"),
+            ]),
+            ui.Text(f"{name}{' · ' + dims if dims else ''}", variant="caption"),
+            ui.Text(
+                "Your next post goes out with this photo — the text becomes its "
+                "caption, capped at 1024 characters instead of 4096.",
+                variant="caption",
+            ),
+            ui.Button(
+                "Remove photo", icon="X", variant="secondary", size="sm",
+                on_click=ui.Call("clear_staged_photo"),
+            ),
+        ])
+
+    return ui.Stack(gap=2, children=[
+        ui.Stack(direction="h", gap=2, children=[
+            ui.Icon("Image"),
+            ui.Text("Photo for the next post"),
+        ]),
+        ui.FileUpload(
+            param_name="files",
+            accept="image/*",
+            max_size_mb=10,          # Telegram's own cap for sendPhoto
+            multiple=False,          # single-slot staging, see storage.py
+            show_previews=True,
+            hint="Drop an image here to attach it to your next post",
+            on_upload=ui.Call("upload_post_photo"),
+        ),
+    ])
+
+
 @ext.panel(
     "sidebar",
     slot="left",
@@ -35,7 +89,10 @@ def _channel_subtitle(record: dict) -> str:
     refresh=(
         "on_event:telegram-publisher-extension.connect_telegram,"
         "telegram-publisher-extension.channel_connected,"
-        "telegram-publisher-extension.channel_disconnected"
+        "telegram-publisher-extension.channel_disconnected,"
+        "telegram-publisher-extension.photo_staged,"
+        "telegram-publisher-extension.photo_cleared,"
+        "telegram-publisher-extension.post_published"
     ),
 )
 async def sidebar(ctx, **kwargs):
@@ -56,6 +113,7 @@ async def sidebar(ctx, **kwargs):
         return ui.Stack(gap=3, children=children)
 
     channels = await storage.list_channel_records(ctx)
+    staged = await storage.get_staged_photo(ctx)
 
     header = ui.Stack(direction="h", gap=2, children=[
         ui.Badge(color="green"),
@@ -99,4 +157,6 @@ async def sidebar(ctx, **kwargs):
         ]
         body = ui.Stack(gap=2, children=[summary, ui.List(items=items)])
 
-    return ui.Stack(gap=3, children=[header, ui.Divider(), body])
+    return ui.Stack(gap=3, children=[
+        header, ui.Divider(), body, ui.Divider(), _photo_section(staged),
+    ])
