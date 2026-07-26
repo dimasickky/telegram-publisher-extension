@@ -11,10 +11,28 @@ log = logging.getLogger("telegram-publisher")
     "channels_overview",
     alert=True,
     ttl=300,
-    description="Linked Telegram channels — id, title, can_post per channel.",
+    description=(
+        "Linked Telegram channels — id, title, can_post per channel — plus whether a photo "
+        "is already attached and waiting for the next post."
+    ),
 )
 async def channels_overview(ctx):
-    """Ambient context for the intent classifier: linked Telegram channels."""
+    """Ambient context for the intent classifier: linked channels + staged photo.
+
+    The staged-photo flags are here for a specific failure this fixed: with no
+    ambient signal that a photo was already attached, the only honest thing an
+    assistant could conclude from "use the photo I attached" was that it must
+    somehow read the file — which no extension can do, since nothing in the
+    SDK's Context carries chat attachments. So it refused a request that was
+    in fact ready to run: the bytes were already on Telegram's side and
+    post_to_channel picks them up by file_id on its own.
+
+    Hence a flag, not the file: `photo_attached` says a photo is staged and
+    will ride along automatically, and `photo_caption_limit` states the cap
+    that comes with it (a photo post is a captioned post — 1024 characters,
+    not 4096), so drafting targets the right length from the start instead of
+    being rejected afterwards.
+    """
     try:
         rows = await storage.list_channel_records(ctx)
         channels = [
@@ -22,10 +40,19 @@ async def channels_overview(ctx):
              "can_post": r.get("can_post", False)}
             for r in rows
         ]
-        return {"response": {"channels_linked": len(channels), "channels": channels}}
+        staged = await storage.get_staged_photo(ctx)
+        snapshot = {
+            "channels_linked": len(channels),
+            "channels": channels,
+            "photo_attached": bool(staged and staged.get("file_id")),
+        }
+        if snapshot["photo_attached"]:
+            snapshot["photo_name"] = staged.get("name") or "photo"
+            snapshot["photo_caption_limit"] = 1024
+        return {"response": snapshot}
     except Exception as e:
         log.error("skeleton refresh failed: %s", e)
-        return {"response": {"channels_linked": 0, "channels": []}}
+        return {"response": {"channels_linked": 0, "channels": [], "photo_attached": False}}
 
 
 @ext.tool(

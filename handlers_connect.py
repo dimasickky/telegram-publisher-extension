@@ -78,6 +78,8 @@ class ConnectTelegramResult(BaseModel):
 class ConnectionStatusResult(BaseModel):
     linked: bool
     telegram_user_id: int | None = None
+    photo_attached: bool = False
+    photo_name: str = ""
 
 
 async def _bot_username(ctx) -> str | None:
@@ -154,17 +156,40 @@ async def connect_telegram(ctx, params: ConnectTelegramParams) -> ActionResult:
 @chat.function(
     "get_telegram_connection_status",
     action_type="read",
-    description="Check whether the user has linked their Telegram account to this extension yet.",
+    description=(
+        "Check whether the user has linked their Telegram account to this extension yet, and "
+        "whether a photo is already attached and waiting for the next post."
+    ),
     data_model=ConnectionStatusResult,
 )
 async def get_telegram_connection_status(ctx, params: _NoParams) -> ActionResult:
-    """Read-only: is there a tg_user_link record for this user?"""
+    """Read-only: the tg_user_link record, plus whether a photo is staged.
+
+    Reports the staged photo as a flag rather than as file content: the image
+    itself is not readable from here (see skeleton.channels_overview), and it
+    does not need to be — post_to_channel attaches it by file_id on its own.
+    """
     link = await storage.get_telegram_user_link(ctx)
     if not link:
         return ActionResult.success(summary="Telegram is not linked yet.", data={"linked": False})
+
+    staged = await storage.get_staged_photo(ctx)
+    has_photo = bool(staged and staged.get("file_id"))
+    photo_name = (staged or {}).get("name") or ""
+    summary = f"Telegram linked (user id {link.get('telegram_user_id')})."
+    if has_photo:
+        summary += (
+            f" A photo is attached ({photo_name or 'photo'}) and will be sent with the next "
+            "post automatically — caption limit 1024 characters."
+        )
     return ActionResult.success(
-        summary=f"Telegram linked (user id {link.get('telegram_user_id')}).",
-        data={"linked": True, "telegram_user_id": link.get("telegram_user_id")},
+        summary=summary,
+        data={
+            "linked": True,
+            "telegram_user_id": link.get("telegram_user_id"),
+            "photo_attached": has_photo,
+            "photo_name": photo_name,
+        },
     )
 
 

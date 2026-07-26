@@ -145,8 +145,13 @@ async def _dm_draft_to_user(ctx, record: dict, params: PostToChannelParams,
     action_type="write",
     description=(
         "Publish a post to one of your linked Telegram channels. Optionally attach a photo "
-        "by URL, or leave photo_url empty to use the photo uploaded in the panel (if any) — "
+        "by URL, or leave photo_url empty to use the photo the user uploaded in the panel — "
         "a pending photo is picked up automatically and cleared once the post goes out. "
+        "IMPORTANT: when the user says they attached a photo, just write the post and call "
+        "this tool — the photo is already on Telegram's side and is attached by reference. "
+        "You do NOT need to see, read or receive the image file, and you cannot: no tool "
+        "returns image content. Never refuse or stall a post because the file is not visible "
+        "to you; check get_telegram_connection_status if you want to confirm one is pending. "
         "Requires the bot to have 'Post messages' permission on that channel. "
         "ALWAYS a two-step flow: call it first WITHOUT confirm to produce a draft (shown in "
         "chat and DM'd to the author by the publishing bot itself), and only call it again "

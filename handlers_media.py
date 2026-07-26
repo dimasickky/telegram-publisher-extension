@@ -209,7 +209,11 @@ async def upload_post_photo(ctx, params: UploadPostPhotoParams) -> ActionResult:
             width=record["width"], height=record["height"],
             staged_at=record["staged_at"],
         ),
-        summary=f"Photo \u201c{filename}\u201d attached — it'll go out with your next post.",
+        summary=(
+            f"Photo \u201c{filename}\u201d attached — it'll go out with your next post automatically, "
+            "no need to reference it explicitly (post_to_channel picks it up; leave photo_url "
+            "empty). Keep the text within 1024 characters, since it becomes the caption."
+        ),
         ui=_staged_ui(record),
         refresh_panels=["sidebar"],
     )

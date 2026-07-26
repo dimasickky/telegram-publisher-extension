@@ -2,7 +2,7 @@
   "manifest_schema_version": 3,
   "sdk_version": "5.9.12",
   "app_id": "telegram-publisher-extension",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "name": "Telegram Publisher",
   "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
   "icon": "icon.svg",
@@ -15,7 +15,7 @@
   "tools": [
     {
       "name": "skeleton_refresh_channels_overview",
-      "description": "Linked Telegram channels — id, title, can_post per channel.",
+      "description": "Linked Telegram channels — id, title, can_post per channel — plus whether a photo is already attached and waiting for the next post.",
       "scopes": [],
       "parameters": {}
     },
@@ -77,7 +77,7 @@
     },
     {
       "name": "get_telegram_connection_status",
-      "description": "Check whether the user has linked their Telegram account to this extension yet.",
+      "description": "Check whether the user has linked their Telegram account to this extension yet, and whether a photo is already attached and waiting for the next post.",
       "action_type": "read",
       "chain_callable": true,
       "effects": [],
@@ -104,6 +104,16 @@
             ],
             "default": null,
             "title": "Telegram User Id"
+          },
+          "photo_attached": {
+            "default": false,
+            "title": "Photo Attached",
+            "type": "boolean"
+          },
+          "photo_name": {
+            "default": "",
+            "title": "Photo Name",
+            "type": "string"
           }
         },
         "required": [
@@ -417,7 +427,7 @@
     },
     {
       "name": "post_to_channel",
-      "description": "Publish a post to one of your linked Telegram channels. Optionally attach a photo by URL, or leave photo_url empty to use the photo uploaded in the panel (if any) — a pending photo is picked up automatically and cleared once the post goes out. Requires the bot to have 'Post messages' permission on that channel. ALWAYS a two-step flow: call it first WITHOUT confirm to produce a draft (shown in chat and DM'd to the author by the publishing bot itself), and only call it again with confirm=true after the author has approved that specific draft. Never publish on the first call — 'post it' authorises the draft, not the publication.",
+      "description": "Publish a post to one of your linked Telegram channels. Optionally attach a photo by URL, or leave photo_url empty to use the photo the user uploaded in the panel — a pending photo is picked up automatically and cleared once the post goes out. IMPORTANT: when the user says they attached a photo, just write the post and call this tool — the photo is already on Telegram's side and is attached by reference. You do NOT need to see, read or receive the image file, and you cannot: no tool returns image content. Never refuse or stall a post because the file is not visible to you; check get_telegram_connection_status if you want to confirm one is pending. Requires the bot to have 'Post messages' permission on that channel. ALWAYS a two-step flow: call it first WITHOUT confirm to produce a draft (shown in chat and DM'd to the author by the publishing bot itself), and only call it again with confirm=true after the author has approved that specific draft. Never publish on the first call — 'post it' authorises the draft, not the publication.",
       "action_type": "write",
       "chain_callable": true,
       "effects": [
@@ -446,7 +456,7 @@
               }
             ],
             "default": null,
-            "description": "Optional PUBLIC image URL to attach as a photo post (caption = text). Leave empty to use the photo uploaded through the panel, if one is pending — that one is picked up automatically. A file the user attached to a chat message is NOT available here.",
+            "description": "Optional PUBLIC image URL to attach as a photo post (caption = text). Leave empty to use the photo the user uploaded through the panel, if one is pending — it is attached automatically by reference, so leaving this empty is the correct way to post 'the photo I attached'. Do not attempt to read, describe or fetch that file first: its content is never exposed to any tool, and it does not need to be. A file attached to a chat message is a different thing entirely and is not available here at all.",
             "title": "Photo Url"
           },
           "disable_preview": {

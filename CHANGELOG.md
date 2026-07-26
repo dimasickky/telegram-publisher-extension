@@ -2,6 +2,33 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## [0.6.1] - 2026-07-26
+
+### Fixed
+
+- **An attached photo was invisible to the assistant, so it refused to use it.**
+  0.6.0 shipped the upload and the automatic pickup, but nothing ever *told*
+  the assistant a photo was waiting. Asked to "use the photo I attached", the
+  only honest conclusion available to it was that it had to read the file
+  first — which no extension can do, since nothing in the SDK's `Context`
+  carries attachments. So it declined a request that was in fact ready to run:
+  the bytes were already on Telegram's side and `post_to_channel` attaches
+  them by `file_id` without ever seeing them.
+
+  The state is now visible where decisions get made, as a flag rather than as
+  file content:
+  - `channels_overview` (skeleton) reports `photo_attached`, the file name, and
+    the 1024-character caption limit that comes with it — ambient context, so
+    it is known before a tool is even chosen, and drafting targets the right
+    length from the start.
+  - `get_telegram_connection_status` reports the same, and says the photo will
+    be sent automatically.
+  - `post_to_channel`'s own description now states plainly that the image does
+    not need to be seen, cannot be, and that a post must never be stalled over
+    it.
+  - `upload_post_photo`'s confirmation spells out the next step: just write the
+    post, leave `photo_url` empty.
+
 ## [0.6.0] - 2026-07-26
 
 ### Added

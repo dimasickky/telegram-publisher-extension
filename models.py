@@ -39,8 +39,11 @@ class PostToChannelParams(BaseModel):
     ))
     photo_url: str | None = Field(default=None, description=(
         "Optional PUBLIC image URL to attach as a photo post (caption = text). Leave empty to "
-        "use the photo uploaded through the panel, if one is pending — that one is picked up "
-        "automatically. A file the user attached to a chat message is NOT available here."
+        "use the photo the user uploaded through the panel, if one is pending — it is attached "
+        "automatically by reference, so leaving this empty is the correct way to post 'the "
+        "photo I attached'. Do not attempt to read, describe or fetch that file first: its "
+        "content is never exposed to any tool, and it does not need to be. A file attached to "
+        "a chat message is a different thing entirely and is not available here at all."
     ))
     disable_preview: bool = Field(default=False, description="Suppress link preview card for URLs in the text")
     confirm: bool = Field(
