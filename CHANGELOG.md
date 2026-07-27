@@ -2,6 +2,42 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## [0.7.2] - 2026-07-27
+
+### Fixed
+
+- **`/start` could silently do nothing once enough link codes were parked.**
+  `find_and_consume_link_code` scanned the first 200 rows for a matching code.
+  That collection lives in the shared `__webhook__` partition — it holds the
+  pending codes of *every* user at once — so past 200 rows a valid code stopped
+  being found and linking failed with nothing to show for it. Now a
+  `where={"code": ...}` lookup. The TTL check that lived inside the old loop is
+  preserved, and there is a test pinning it so the fix cannot quietly drop it.
+- **Channel and digest lookups were scans with a hidden ceiling.** Finding a
+  channel by `chat_id` read the first 100 rows and compared in Python; a channel
+  past that point became invisible. Now `where=`-filtered.
+- Bare `limit=100` / `limit=200` at call sites replaced by named ceilings
+  (`_OWN_PARTITION_LIMIT`, `_SHARED_SWEEP_LIMIT`) so a cap can no longer read
+  like "everything".
+
+### Notes
+
+- **`chat_id` is matched as a string on purpose.** It arrives from the LLM as
+  text but is stored as a number, which is exactly why the old code compared
+  `str(...) == str(...)`. A naive `where={"chat_id": chat_id}` would be an exact
+  match and would stop finding channels — so the lookup normalises the type
+  first. This is the trap that made the telegram fix different from the others.
+- **`claim_pending_channels` deliberately keeps its full sweep.** It doubles as
+  the only expiry cleanup this shared collection has, so narrowing it to one
+  user would look tidier while letting other users' stale rows accumulate
+  forever. A test now pins that behaviour against a future "cleanup".
+- **Why this is not cursor paging.** `Page` carries `cursor`/`has_more` and
+  `StoreProtocol` advertises `cursor=`, but the real client
+  (`imperal_sdk/store/client.py`, SDK 5.9.12) accepts only `limit` — page 2
+  cannot be requested. So: `where=` for point lookups, named ceilings for real
+  lists.
+- 7 new tests. 52 total.
+
 ## [0.7.1] - 2026-07-27
 
 ### Fixed

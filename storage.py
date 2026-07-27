@@ -36,6 +36,17 @@ PENDING_CHANNELS_COLLECTION = "tg_pending_channels"  # shared "__webhook__" part
 STAGED_PHOTO_COLLECTION = "tg_staged_photo"      # per-user own partition (single-slot)
 POST_DIGEST_COLLECTION = "tg_post_digest"        # per-user own partition (one doc per channel)
 
+# Explicit, named ceilings for the reads that are genuinely LISTS.
+#
+# Cursor paging is not available: `Page` carries `cursor`/`has_more` and
+# `StoreProtocol` advertises a `cursor=` argument, but the real client
+# (`imperal_sdk/store/client.py`, SDK 5.9.12) accepts only `limit` — so page 2
+# cannot be requested at all. Given that, the honest move is a named ceiling at
+# the call site instead of a bare `limit=200` that reads like "everything", plus
+# `where=` wherever a read is really a point lookup.
+_OWN_PARTITION_LIMIT = 100   # this user's own channels / digests
+_SHARED_SWEEP_LIMIT = 200    # shared "__webhook__" partition (all users)
+
 
 def _store_for(ctx, user_id: str):
     """Build a StoreClient scoped to an arbitrary user_id, reusing ctx.store's
@@ -119,16 +130,21 @@ async def find_and_consume_link_code(webhook_ctx, code: str, ttl_seconds: int = 
     find_and_consume_oauth_state doing the same for its own state tokens."""
     import time as _time
     store = _store_for(webhook_ctx, "__webhook__")
-    page = await store.query(LINK_CODES_COLLECTION, limit=200)
-    for doc in page.data:
-        if doc.data.get("code") == code:
-            owner = doc.data.get("imperal_id")
-            created_ts = doc.data.get("created_ts", 0)
-            await store.delete(LINK_CODES_COLLECTION, doc.id)
-            if created_ts and (_time.time() - created_ts) > ttl_seconds:
-                return None
-            return owner
-    return None
+    # `where=` point lookup, not a scan of the first 200 rows. This collection
+    # lives in the shared "__webhook__" partition, so it holds the pending codes
+    # of EVERY user at once: past 200 parked rows a perfectly valid code stopped
+    # being found and /start silently did nothing. Filtering in the database
+    # finds the row no matter how big the collection grows.
+    page = await store.query(LINK_CODES_COLLECTION, where={"code": code}, limit=1)
+    if not page.data:
+        return None
+    doc = page.data[0]
+    owner = doc.data.get("imperal_id")
+    created_ts = doc.data.get("created_ts", 0)
+    await store.delete(LINK_CODES_COLLECTION, doc.id)
+    if created_ts and (_time.time() - created_ts) > ttl_seconds:
+        return None
+    return owner
 
 
 async def bind_telegram_user(webhook_ctx, imperal_id: str, telegram_user_id: int, linked_at: str) -> None:
@@ -173,12 +189,12 @@ async def get_telegram_user_link(ctx) -> dict | None:
 # ── Channel records (N per user, same shape as wp-site-connector's `sites`) ── #
 
 async def list_channel_records(ctx) -> list[dict]:
-    page = await ctx.store.query(CHANNELS_COLLECTION, limit=100)
+    page = await ctx.store.query(CHANNELS_COLLECTION, limit=_OWN_PARTITION_LIMIT)
     return [doc.data for doc in page.data]
 
 
 async def _find_channel_doc(ctx, chat_id):
-    page = await ctx.store.query(CHANNELS_COLLECTION, limit=100)
+    page = await ctx.store.query(CHANNELS_COLLECTION, limit=_OWN_PARTITION_LIMIT)
     for doc in page.data:
         if str(doc.data.get("chat_id")) == str(chat_id):
             return doc
@@ -196,7 +212,7 @@ async def save_channel_record_for_user(webhook_ctx, imperal_id: str, record: dic
     user's own partition (via _store_for), not "__webhook__"."""
     store = _store_for(webhook_ctx, imperal_id)
     existing = None
-    page = await store.query(CHANNELS_COLLECTION, limit=100)
+    page = await store.query(CHANNELS_COLLECTION, limit=_OWN_PARTITION_LIMIT)
     for doc in page.data:
         if str(doc.data.get("chat_id")) == str(record.get("chat_id")):
             existing = doc
@@ -227,16 +243,27 @@ async def save_pending_channel(webhook_ctx, telegram_user_id: int, record: dict)
     """
     import time as _time
     store = _store_for(webhook_ctx, "__webhook__")
-    page = await store.query(PENDING_CHANNELS_COLLECTION, limit=200)
     payload = {
         "telegram_user_id": telegram_user_id,
         "chat_id": record.get("chat_id"),
         "record": record,
         "created_ts": _time.time(),
     }
+    # Narrowed by `where=` on telegram_user_id — an int straight off the Telegram
+    # update, so an exact match is safe — instead of paging through every user's
+    # parked rows in the shared partition.
+    #
+    # chat_id is then compared with str() in Python ON PURPOSE and is NOT part of
+    # the `where=`: it is stored as an int by the webhook but arrives as a string
+    # from chat params, and an exact-match filter on mixed types would quietly
+    # stop matching, turning an upsert into a duplicate row on every churn.
+    page = await store.query(
+        PENDING_CHANNELS_COLLECTION,
+        where={"telegram_user_id": telegram_user_id},
+        limit=_SHARED_SWEEP_LIMIT,
+    )
     for doc in page.data:
-        if (doc.data.get("telegram_user_id") == telegram_user_id
-                and str(doc.data.get("chat_id")) == str(record.get("chat_id"))):
+        if str(doc.data.get("chat_id")) == str(record.get("chat_id")):
             await store.update(PENDING_CHANNELS_COLLECTION, doc.id, payload)
             return
     await store.create(PENDING_CHANNELS_COLLECTION, payload)
@@ -263,7 +290,12 @@ async def claim_pending_channels(webhook_ctx, imperal_id: str, telegram_user_id:
     """
     import time as _time
     store = _store_for(webhook_ctx, "__webhook__")
-    page = await store.query(PENDING_CHANNELS_COLLECTION, limit=200)
+    # Deliberately NOT narrowed with `where=`, unlike save_pending_channel: this
+    # loop doubles as the ONLY expiry sweep for this collection, and it has to be
+    # able to see other users' stale rows in order to drop them. Filtering to
+    # telegram_user_id would make the lookup tidier and let the junk accumulate
+    # forever — the exact thing the TTL above exists to prevent.
+    page = await store.query(PENDING_CHANNELS_COLLECTION, limit=_SHARED_SWEEP_LIMIT)
     now = _time.time()
     claimed: list[dict] = []
     for doc in page.data:
@@ -298,7 +330,7 @@ async def mark_channel_disconnected_for_user(webhook_ctx, imperal_id: str, chat_
     the stored record's can_post to False rather than deleting it outright,
     so the user still sees it (as disconnected) and can re-invite the bot."""
     store = _store_for(webhook_ctx, imperal_id)
-    page = await store.query(CHANNELS_COLLECTION, limit=100)
+    page = await store.query(CHANNELS_COLLECTION, limit=_OWN_PARTITION_LIMIT)
     for doc in page.data:
         if str(doc.data.get("chat_id")) == str(chat_id):
             updated = dict(doc.data)
@@ -359,7 +391,7 @@ async def clear_staged_photo(ctx) -> bool:
 
 
 async def _find_digest_doc(ctx, chat_id):
-    page = await ctx.store.query(POST_DIGEST_COLLECTION, limit=100)
+    page = await ctx.store.query(POST_DIGEST_COLLECTION, limit=_OWN_PARTITION_LIMIT)
     for doc in page.data:
         if str(doc.data.get("chat_id")) == str(chat_id):
             return doc
@@ -374,7 +406,7 @@ async def get_post_digest(ctx, chat_id) -> dict | None:
 
 async def list_post_digests(ctx) -> list[dict]:
     """Every cached digest for this user — what the skeleton reads."""
-    page = await ctx.store.query(POST_DIGEST_COLLECTION, limit=100)
+    page = await ctx.store.query(POST_DIGEST_COLLECTION, limit=_OWN_PARTITION_LIMIT)
     return [doc.data for doc in page.data]
 
 
