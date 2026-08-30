@@ -1,6 +1,6 @@
 # Telegram Publisher
 
-[![Imperal SDK](https://img.shields.io/badge/Imperal%20SDK-5.9.12-6c5ce7?logo=python&logoColor=white)](https://imperal.io)
+[![Imperal SDK](https://img.shields.io/badge/Imperal%20SDK-5.13.1-6c5ce7?logo=python&logoColor=white)](https://imperal.io)
 [![License: LGPL v2.1](https://img.shields.io/badge/License-LGPL--2.1-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
 

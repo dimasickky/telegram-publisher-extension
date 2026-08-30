@@ -2,6 +2,34 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## v0.7.4 — 2026-08-31 — SDK 5.13.1, public re-scoping API
+
+### Changed
+
+- **imperal-sdk 5.9.22 → 5.13.1** — new gateway namespaces
+  (`ctx.conversations/users/apps/rbac`), unified callable catalog,
+  tray/menu contributions, `tests/`-fixture deploy scan fix.
+- `storage._store_for` now uses `ctx.store.for_user(uid)` — the public
+  API that replaced the rebuild-from-private-attributes workaround.
+
+## [0.7.3] - 2026-08-16
+
+### Changed
+
+- **Bumped `imperal-sdk` 5.9.12 → 5.9.22.** Diffed both wheels directly before
+  touching the pin — every change on the way is additive and defaulted, and
+  this module touches none of the changed surfaces. Zero behavior change.
+
+### Notes
+
+- **Known technical debt, not addressed in this release.** `storage.py` still
+  reads `ctx.store._gateway_url` / `._auth_token` directly to build a scoped
+  client for the webhook partition — a private-attribute workaround the
+  SDK's own 5.9.x changelog names this extension in, as one of three carrying
+  it. 5.9.22 ships the intended replacement, `StoreClient.for_user(user_id)`,
+  but migrating is being tracked separately so it can be tested in isolation
+  rather than bundled into a version bump.
+
 ## [0.7.2] - 2026-07-27
 
 ### Fixed

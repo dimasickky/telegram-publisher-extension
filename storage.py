@@ -54,22 +54,15 @@ def _store_for(ctx, user_id: str):
     rationale/implementation to github-connector's storage._store_for: a
     webhook ctx's identity is the pseudo-user "__webhook__" (Extension.webhook's
     docstring), not "__system__", so ctx.as_user() doesn't apply here; this
-    sidesteps that by building the StoreClient directly.
+    sidesteps that via the SDK's public ``StoreClient.for_user`` (sdk >= 5.9.22).
 
-    Falls back to ctx.store itself when the gateway attributes aren't present
+    Falls back to ctx.store itself when ``for_user`` isn't present
     (imperal_sdk.testing's MockStore — a plain in-memory dict used in tests,
     which never crosses a real user boundary).
     """
-    if not hasattr(ctx.store, "_gateway_url"):
+    if not hasattr(ctx.store, "for_user"):
         return ctx.store
-    from imperal_sdk.store.client import StoreClient
-    return StoreClient(
-        gateway_url=ctx.store._gateway_url,
-        service_token=ctx.store._auth_token,
-        extension_id=ctx.store._extension_id,
-        user_id=user_id,
-        tenant_id=ctx.store._tenant_id,
-    )
+    return ctx.store.for_user(user_id)
 
 
 def _extensions_for(ctx, user_id: str):
