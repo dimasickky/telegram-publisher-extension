@@ -79,6 +79,43 @@ class UploadPostPhotoParams(BaseModel):
     )
 
 
+class PostToChannelsParams(BaseModel):
+    channel_ids: list[str] = Field(
+        description="List of channel IDs to publish this post to — must be linked channels from list_telegram_channels",
+    )
+    text: str = Field(description=(
+        "Post body. Accepts a LIMITED HTML subset only — Telegram channel posts "
+        "support b/i/u/s/a/code/pre/blockquote/spoiler. Plain text also works unformatted."
+    ))
+    photo_url: str | None = Field(default=None, description="Optional PUBLIC image URL to attach as a photo post")
+    disable_preview: bool = Field(default=False, description="Suppress link preview card for URLs in the text")
+    confirm: bool = Field(
+        default=False,
+        description=(
+            "Set true ONLY to publish drafts the user has approved. First call (confirm=false) produces a "
+            "preview of the crosspost across all target channels."
+        ),
+    )
+
+
+class PostToChannelsItemResult(BaseModel):
+    channel_id: str
+    channel_title: str = ""
+    status: str = "ok"       # "ok" | "error" | "preview"
+    message_id: int = 0
+    link: str | None = None
+    error: str | None = None
+
+
+class BulkPostResult(sdl.Entity):
+    total: int = 0
+    succeeded_count: int = 0
+    failed_count: int = 0
+    needs_confirmation: bool = False
+    results: list[PostToChannelsItemResult] = []
+
+
+
 class GenerateDraftParams(BaseModel):
     channel_id: str = Field(description="Channel id from a previous list_telegram_channels call — never invent it")
     brief: str = Field(description="What the post should say/announce — a topic, brief, or rough draft in plain language")

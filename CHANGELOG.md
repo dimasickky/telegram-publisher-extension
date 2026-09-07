@@ -2,6 +2,13 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## v0.8.1 — 2026-09-07 — Batch Crossposting & Tests
+
+### Added
+
+- **Batch Crossposting (`post_to_channels`)** — publish the same post to multiple linked Telegram channels simultaneously with two-step preview/confirm flow (`confirm=False` draft preview, `confirm=True` dispatch with bounded concurrency).
+- **Automated Test Suite** — added `tests/test_post_to_channels.py` covering multi-channel preview, publication dispatch, and unlinked/permission validation.
+
 ## v0.8.0 — 2026-09-07 — SDK 5.15.1, SWR caching
 
 ### Added

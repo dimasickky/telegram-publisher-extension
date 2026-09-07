@@ -2,7 +2,7 @@
   "manifest_schema_version": 3,
   "sdk_version": "5.15.1",
   "app_id": "telegram-publisher-extension",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "name": "Telegram Publisher",
   "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
   "icon": "icon.svg",
@@ -582,6 +582,230 @@
           "title"
         ],
         "title": "PostResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "telegram-publisher-extension.post_published",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "telegram-publisher"
+    },
+    {
+      "name": "post_to_channels",
+      "description": "Publish the SAME post to MULTIPLE linked Telegram channels at once (crossposting). Pass a list of channel_ids, post text, and optional photo_url. Always a two-step flow: first call (confirm=false) checks channel permissions and returns a preview draft of the crosspost across all target channels; second call (confirm=true) dispatches the message to each channel with bounded concurrency and returns a per-channel report.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "telegram.post"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "channel_ids": {
+            "description": "List of channel IDs to publish this post to — must be linked channels from list_telegram_channels",
+            "items": {
+              "type": "string"
+            },
+            "title": "Channel Ids",
+            "type": "array"
+          },
+          "text": {
+            "description": "Post body. Accepts a LIMITED HTML subset only — Telegram channel posts support b/i/u/s/a/code/pre/blockquote/spoiler. Plain text also works unformatted.",
+            "title": "Text",
+            "type": "string"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional PUBLIC image URL to attach as a photo post",
+            "title": "Photo Url"
+          },
+          "disable_preview": {
+            "default": false,
+            "description": "Suppress link preview card for URLs in the text",
+            "title": "Disable Preview",
+            "type": "boolean"
+          },
+          "confirm": {
+            "default": false,
+            "description": "Set true ONLY to publish drafts the user has approved. First call (confirm=false) produces a preview of the crosspost across all target channels.",
+            "title": "Confirm",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "channel_ids",
+          "text"
+        ],
+        "title": "PostToChannelsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "PostToChannelsItemResult": {
+            "properties": {
+              "channel_id": {
+                "title": "Channel Id",
+                "type": "string"
+              },
+              "channel_title": {
+                "default": "",
+                "title": "Channel Title",
+                "type": "string"
+              },
+              "status": {
+                "default": "ok",
+                "title": "Status",
+                "type": "string"
+              },
+              "message_id": {
+                "default": 0,
+                "title": "Message Id",
+                "type": "integer"
+              },
+              "link": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Link"
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Error"
+              }
+            },
+            "required": [
+              "channel_id"
+            ],
+            "title": "PostToChannelsItemResult",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "succeeded_count": {
+            "default": 0,
+            "title": "Succeeded Count",
+            "type": "integer"
+          },
+          "failed_count": {
+            "default": 0,
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "needs_confirmation": {
+            "default": false,
+            "title": "Needs Confirmation",
+            "type": "boolean"
+          },
+          "results": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/PostToChannelsItemResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "BulkPostResult",
         "type": "object",
         "x-sdl": "entity"
       },

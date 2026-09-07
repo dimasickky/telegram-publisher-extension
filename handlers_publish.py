@@ -19,7 +19,10 @@ import logging
 from imperal_sdk import ActionResult, ui
 
 from app import chat
-from models import PostToChannelParams, ChannelIdParams, PostResult, DisconnectResult
+from models import (
+    PostToChannelParams, PostToChannelsParams, ChannelIdParams,
+    PostResult, BulkPostResult, DisconnectResult,
+)
 from error_codes import TG_CHANNEL_NOT_FOUND, TG_BOT_CANNOT_POST, TG_SEND_FAILED, TG_BOT_UNREACHABLE
 import storage
 import telegram_client as tg
@@ -259,6 +262,172 @@ async def post_to_channel(ctx, params: PostToChannelParams) -> ActionResult:
         data=PostResult(
             id=str(message_id), title="Post", kind="telegram_post",
             channel_id=params.channel_id, message_id=message_id, link=link,
+        ),
+        refresh_panels=["sidebar"] if from_staging else None,
+    )
+
+
+# ─── Batch crossposting (SDK 5.15+ bulk contract) ─────────────────────────── #
+
+MAX_BULK_CHANNELS = 20
+_TELEGRAM_BULK_CONCURRENCY = 4
+
+
+@chat.function(
+    "post_to_channels",
+    action_type="write",
+    description=(
+        "Publish the SAME post to MULTIPLE linked Telegram channels at once (crossposting). "
+        "Pass a list of channel_ids, post text, and optional photo_url. "
+        "Always a two-step flow: first call (confirm=false) checks channel permissions and returns "
+        "a preview draft of the crosspost across all target channels; second call (confirm=true) "
+        "dispatches the message to each channel with bounded concurrency and returns a per-channel report."
+    ),
+    effects=["telegram.post"],
+    event="telegram-publisher-extension.post_published",
+    data_model=BulkPostResult,
+)
+async def post_to_channels(ctx, params: PostToChannelsParams) -> ActionResult:
+    """Crosspost to multiple linked channels concurrently with bounded rate limits."""
+    from models import PostToChannelsItemResult, BulkPostResult
+    import asyncio
+
+    channel_ids = list(dict.fromkeys(str(cid).strip() for cid in params.channel_ids if str(cid).strip()))
+    if not channel_ids:
+        return ActionResult.error("No channel_ids provided.", code="VALIDATION_MISSING_FIELD")
+    if len(channel_ids) > MAX_BULK_CHANNELS:
+        return ActionResult.error(
+            f"Too many channels in one batch ({len(channel_ids)}). Maximum is {MAX_BULK_CHANNELS}.",
+            code="BULK_LIMIT_EXCEEDED",
+        )
+
+    # 1. Resolve and validate all unique channels upfront.
+    resolved_channels = []
+    missing_channels = []
+    no_perm_channels = []
+
+    for cid in channel_ids:
+        rec = await storage.get_channel_record(ctx, cid)
+        if not rec:
+            missing_channels.append(cid)
+        elif not rec.get("can_post", False):
+            no_perm_channels.append(rec.get("chat_title", cid))
+        else:
+            resolved_channels.append(rec)
+
+    if missing_channels:
+        return ActionResult.error(
+            f"The following channel IDs are not linked: {', '.join(missing_channels)}. Check list_telegram_channels.",
+            code=TG_CHANNEL_NOT_FOUND,
+        )
+    if no_perm_channels:
+        return ActionResult.error(
+            f"Bot lacks 'Post messages' permission on: {', '.join(no_perm_channels)}. Grant permission in channel settings.",
+            code=TG_BOT_CANNOT_POST,
+        )
+
+    photo, from_staging = await _resolve_photo(ctx, PostToChannelParams(
+        channel_id=channel_ids[0], text=params.text, photo_url=params.photo_url,
+    ))
+    max_len = 1024 if photo else 4096
+    if len(params.text) > max_len:
+        return ActionResult.error(
+            f"Post text is too long ({len(params.text)} chars). Limit is {max_len} chars.",
+            code="TG_MESSAGE_TOO_LONG",
+        )
+
+    # Preview mode
+    if not params.confirm:
+        results = [
+            PostToChannelsItemResult(
+                channel_id=str(rec.get("chat_id", "")),
+                channel_title=rec.get("chat_title", str(rec.get("chat_id", ""))),
+                status="preview",
+            )
+            for rec in resolved_channels
+        ]
+        return ActionResult.success(
+            data=BulkPostResult(
+                id="crosspost_preview",
+                title="Crosspost Draft",
+                kind="telegram_crosspost_draft",
+                total=len(resolved_channels),
+                succeeded_count=0,
+                failed_count=0,
+                needs_confirmation=True,
+                results=results,
+            ),
+            summary=(
+                f"Crosspost draft ready for {len(resolved_channels)} channel(s). "
+                "Call again with confirm=true to publish to all of them."
+            ),
+        )
+
+    # Execution with bounded semaphore to avoid Telegram API rate limits
+    sem = asyncio.Semaphore(_TELEGRAM_BULK_CONCURRENCY)
+
+    async def _send_one(rec: dict) -> PostToChannelsItemResult:
+        cid_str = str(rec.get("chat_id", ""))
+        async with sem:
+            try:
+                if photo:
+                    resp = await tg.tg_call(ctx, "sendPhoto", {
+                        "chat_id": rec["chat_id"], "photo": photo, "caption": params.text,
+                        "parse_mode": "HTML",
+                    })
+                else:
+                    resp = await tg.tg_call(ctx, "sendMessage", {
+                        "chat_id": rec["chat_id"], "text": params.text, "parse_mode": "HTML",
+                        "disable_web_page_preview": params.disable_preview,
+                    })
+                if not tg.tg_ok(resp):
+                    return PostToChannelsItemResult(
+                        channel_id=cid_str,
+                        channel_title=rec.get("chat_title", cid_str),
+                        status="error",
+                        error=tg.tg_error_from(resp),
+                    )
+                res = tg.tg_result(resp) or {}
+                mid = res.get("message_id", 0)
+                u = (res.get("chat") or {}).get("username")
+                link = f"https://t.me/{u}/{mid}" if u and mid else None
+                return PostToChannelsItemResult(
+                    channel_id=cid_str,
+                    channel_title=rec.get("chat_title", cid_str),
+                    status="ok",
+                    message_id=mid,
+                    link=link,
+                )
+            except Exception as exc:
+                return PostToChannelsItemResult(
+                    channel_id=cid_str,
+                    channel_title=rec.get("chat_title", cid_str),
+                    status="error",
+                    error=str(exc),
+                )
+
+    tasks = [_send_one(rec) for rec in resolved_channels]
+    results = await asyncio.gather(*tasks)
+
+    if from_staging:
+        try:
+            await storage.clear_staged_photo(ctx)
+        except Exception as e:
+            log.warning("post_to_channels: published but could not clear staged photo: %s", e)
+
+    succeeded = [r for r in results if r.status == "ok"]
+    failed = [r for r in results if r.status != "ok"]
+
+    return ActionResult.success(
+        summary=f"Crossposted to {len(succeeded)}/{len(results)} channel(s).",
+        data=BulkPostResult(
+            id="crosspost_result",
+            title="Crosspost Result",
+            kind="telegram_crosspost",
+            total=len(results),
+            succeeded_count=len(succeeded),
+            failed_count=len(failed),
+            results=list(results),
         ),
         refresh_panels=["sidebar"] if from_staging else None,
     )
