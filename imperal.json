@@ -1,8 +1,8 @@
 {
   "manifest_schema_version": 3,
-  "sdk_version": "5.13.1",
+  "sdk_version": "5.15.1",
   "app_id": "telegram-publisher-extension",
-  "version": "0.7.4",
+  "version": "0.8.0",
   "name": "Telegram Publisher",
   "description": "Publish posts to your Telegram channels and read new posts for context — connect via one shared bot.",
   "icon": "icon.svg",
@@ -1565,7 +1565,9 @@
       "tree": {},
       "icon": "KeyRound",
       "refresh": "manual",
-      "center_overlay": false
+      "center_overlay": false,
+      "stale_while_revalidate": true,
+      "cache_ttl": 60
     },
     {
       "panel_id": "sidebar",
@@ -1575,6 +1577,8 @@
       "icon": "",
       "refresh": "on_event:telegram-publisher-extension.connect_telegram,telegram-publisher-extension.channel_connected,telegram-publisher-extension.channel_disconnected,telegram-publisher-extension.photo_staged,telegram-publisher-extension.photo_cleared,telegram-publisher-extension.post_published",
       "center_overlay": false,
+      "stale_while_revalidate": true,
+      "cache_ttl": 60,
       "default_width": 280,
       "min_width": 200,
       "max_width": 400

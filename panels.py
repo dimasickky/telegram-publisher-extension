@@ -92,6 +92,8 @@ def _photo_section(staged: dict | None):
     default_width=280,
     min_width=200,
     max_width=400,
+    stale_while_revalidate=True,
+    cache_ttl=60,
     refresh=(
         "on_event:telegram-publisher-extension.connect_telegram,"
         "telegram-publisher-extension.channel_connected,"

@@ -2,6 +2,16 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## v0.8.0 — 2026-09-07 — SDK 5.15.1, SWR caching
+
+### Added
+
+- **Stale-While-Revalidate Caching** — added `stale_while_revalidate=True, cache_ttl=60` to sidebar panel for instant UI rendering.
+
+### Changed
+
+- **imperal-sdk 5.13.1 → 5.15.1** — bumped SDK requirement and regenerated manifest.
+
 ## v0.7.4 — 2026-08-31 — SDK 5.13.1, public re-scoping API
 
 ### Changed
