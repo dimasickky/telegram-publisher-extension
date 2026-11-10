@@ -1807,6 +1807,6 @@
       "max_width": 400
     }
   ],
-  "schema_version": "1.6.0",
-  "category": "communication"
+  "category": "communication",
+  "manifest_schema_version": 3
 }
