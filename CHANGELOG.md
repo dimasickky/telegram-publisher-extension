@@ -2,6 +2,13 @@
 
 All notable changes to Telegram Publisher are documented here.
 
+## v0.8.2 — 2026-11-10 — SDK 6.5.3 & Manifest category
+
+### Changed
+
+- **imperal-sdk 5.9.12 → 6.5.3** — bumped SDK requirement in `requirements.txt` and `imperal.json`.
+- **Manifest category** — declared `"category": "communication"` for platform catalog indexing.
+
 ## v0.8.1 — 2026-09-07 — Batch Crossposting & Tests
 
 ### Added
