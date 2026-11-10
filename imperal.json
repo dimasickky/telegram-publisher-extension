@@ -1,5 +1,4 @@
 {
-  "manifest_schema_version": 3,
   "sdk_version": "5.15.1",
   "app_id": "telegram-publisher-extension",
   "version": "0.8.1",
@@ -1807,5 +1806,7 @@
       "min_width": 200,
       "max_width": 400
     }
-  ]
+  ],
+  "schema_version": "1.6.0",
+  "category": "communication"
 }
