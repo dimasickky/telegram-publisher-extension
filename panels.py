@@ -148,6 +148,10 @@ async def sidebar(ctx, **kwargs):
         ])
     else:
         active = sum(1 for r in channels if r.get("can_post"))
+        stats_bar = ui.Stats([
+            ui.Stat(label="Channels", value=len(channels), icon="Radio", color="blue"),
+            ui.Stat(label="Postable", value=active, icon="Send", color="green" if active == len(channels) else "amber"),
+        ], columns=2)
         summary = ui.Text(f"{active} of {len(channels)} channel(s) postable", variant="caption")
         items = [
             ui.ListItem(
@@ -163,7 +167,7 @@ async def sidebar(ctx, **kwargs):
             )
             for r in channels
         ]
-        body = ui.Stack(gap=2, children=[summary, ui.List(items=items)])
+        body = ui.Stack(gap=2, children=[stats_bar, summary, ui.List(items=items)])
 
     return ui.Stack(gap=3, children=[
         header, ui.Divider(), body, ui.Divider(), _photo_section(staged),
